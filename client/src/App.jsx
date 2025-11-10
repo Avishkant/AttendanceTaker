@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
 import MyDevices from "./pages/MyDevices";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminEmployees from "./pages/AdminEmployees";
 import Layout from "./components/Layout";
 import "./App.css";
 
@@ -47,6 +48,16 @@ function AppRoutes() {
               <PrivateRoute roles={["admin"]}>
                 <Layout>
                   <AdminDashboard />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/employees"
+            element={
+              <PrivateRoute roles={["admin"]}>
+                <Layout>
+                  <AdminEmployees />
                 </Layout>
               </PrivateRoute>
             }

@@ -47,14 +47,40 @@ module.exports = {
       req.headers["x-device-id"] || req.body.deviceId || req.query.deviceId;
     const clientIp = parseForwardedIp(req);
 
-    // Determine allowed IPs: env or user-specific
+    // Determine allowed IPs: env, DB settings, or user-specific
     const envCidrs = (process.env.COMPANY_ALLOWED_IPS || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const allowedCidrs = (user.allowedIPs || []).concat(envCidrs);
 
-    const ipOk = allowedCidrs.length
+    // Try to include company IPs stored in DB settings (if available)
+    let dbCidrs = [];
+    try {
+      // lazy require to avoid circular requires
+      const Setting = require("../models/Setting");
+      const setDoc = await Setting.findOne({
+        key: "company_allowed_ips",
+      }).lean();
+      if (setDoc && Array.isArray(setDoc.value))
+        dbCidrs = setDoc.value.map((s) => String(s).trim()).filter(Boolean);
+    } catch (e) {
+      // ignore DB errors and fall back to env
+    }
+
+    const allowedCidrs = (user.allowedIPs || [])
+      .concat(dbCidrs)
+      .concat(envCidrs);
+
+    // Quick allow if any wildcard CIDR is present (convenience for testing)
+    const hasWildcard = allowedCidrs.some((c) => {
+      if (!c) return false;
+      const s = String(c).trim();
+      return s === "0.0.0.0/0" || s === "::/0" || s === "*";
+    });
+
+    const ipOk = hasWildcard
+      ? true
+      : allowedCidrs.length
       ? ipInCidrs(clientIp, allowedCidrs)
       : false;
 
@@ -68,12 +94,10 @@ module.exports = {
 
     // Require a device id header/body/query for registration/matching
     if (!clientDeviceId)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Missing device identifier (x-device-id)",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Missing device identifier (x-device-id)",
+      });
 
     // If user is an admin, allow them to register or update their own device immediately
     if (user.role === "admin") {

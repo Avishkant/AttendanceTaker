@@ -26,6 +26,102 @@ router.get("/employees", async (req, res) => {
   }
 });
 
+// GET /api/admin/employees/:id/attendance
+router.get("/employees/:id/attendance", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const from = req.query.from ? new Date(req.query.from) : new Date(0);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const Attendance = require("../models/Attendance");
+    const records = await Attendance.find({
+      user: id,
+      timestamp: { $gte: from, $lte: to },
+    })
+      .sort({ timestamp: -1 })
+      .limit(500);
+    return res.json({ success: true, data: records });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/admin/employees/:id/requests
+router.get("/employees/:id/requests", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const list = await require("../models/DeviceChangeRequest")
+      .find({ user: id })
+      .sort({ requestedAt: -1 });
+    return res.json({ success: true, data: list });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/admin/settings/company-ips
+router.get("/settings/company-ips", async (req, res) => {
+  try {
+    const Setting = require("../models/Setting");
+    const doc = await Setting.findOne({ key: "company_allowed_ips" });
+    const ips = Array.isArray(doc?.value) ? doc.value : doc?.value || [];
+    return res.json({ success: true, data: ips });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/admin/settings/company-ips
+router.put("/settings/company-ips", async (req, res) => {
+  try {
+    const { ips } = req.body;
+    if (!ips || !Array.isArray(ips))
+      return res
+        .status(422)
+        .json({ success: false, message: "ips must be an array" });
+    const Setting = require("../models/Setting");
+    let doc = await Setting.findOne({ key: "company_allowed_ips" });
+    if (!doc) {
+      doc = await Setting.create({ key: "company_allowed_ips", value: ips });
+    } else {
+      doc.value = ips;
+      await doc.save();
+    }
+    return res.json({ success: true, data: doc.value });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PATCH /api/admin/employees/:id/allowed-ips
+router.patch("/employees/:id/allowed-ips", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { allowedIPs } = req.body;
+    if (!Array.isArray(allowedIPs))
+      return res
+        .status(422)
+        .json({ success: false, message: "allowedIPs must be an array" });
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    user.allowedIPs = allowedIPs;
+    await user.save();
+    return res.json({
+      success: true,
+      data: { id: user._id, allowedIPs: user.allowedIPs },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // POST /api/admin/employees  (create)
 router.post("/employees", async (req, res) => {
   try {

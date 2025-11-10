@@ -23,12 +23,20 @@ export default function Sidebar() {
           My Devices
         </Link>
         {user?.role === "admin" && (
-          <Link
-            to="/admin"
-            className="px-3 py-2 rounded hover:bg-gray-50 text-gray-700"
-          >
-            Admin
-          </Link>
+          <>
+            <Link
+              to="/admin"
+              className="px-3 py-2 rounded hover:bg-gray-50 text-gray-700"
+            >
+              Admin
+            </Link>
+            <Link
+              to="/admin/employees"
+              className="px-3 py-2 rounded hover:bg-gray-50 text-gray-700"
+            >
+              Manage Employees
+            </Link>
+          </>
         )}
       </nav>
       <div className="p-6 mt-auto">
