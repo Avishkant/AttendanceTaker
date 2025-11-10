@@ -118,6 +118,20 @@ module.exports = {
 
     // For non-admin users: if user has no registeredDevice, create a request to register new device (pending admin)
     if (!user.registeredDevice) {
+      // If there's already a pending request for this user, don't create another
+      const existing = await DeviceChangeRequest.findOne({
+        user: user._id,
+        status: "pending",
+      });
+      if (existing) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "A device-change request is already pending. Please wait for admin approval.",
+          requestId: existing._id,
+        });
+      }
+
       const reqDoc = await DeviceChangeRequest.create({
         user: user._id,
         newDeviceId: clientDeviceId || "unknown",

@@ -155,6 +155,134 @@ router.post("/employees", async (req, res) => {
   }
 });
 
+// PATCH /api/admin/employees/:id  (update name/role)
+router.patch("/employees/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, role } = req.body;
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    if (name) user.name = name;
+    if (role) user.role = role;
+    await user.save();
+    return res.json({
+      success: true,
+      data: { id: user._id, name: user.name, role: user.role },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/admin/employees/:id  (delete)
+router.delete("/employees/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    await User.deleteOne({ _id: id });
+    return res.json({ success: true, message: "User deleted" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/admin/employees/:id/reset-password
+router.post("/employees/:id/reset-password", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { password } = req.body;
+    if (!password)
+      return res
+        .status(422)
+        .json({ success: false, message: "Password required" });
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    const bcrypt = require("bcryptjs");
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(password, salt);
+    await user.save();
+    return res.json({ success: true, message: "Password reset" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/admin/employees/:id/deregister-device
+router.post("/employees/:id/deregister-device", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    user.registeredDevice = null;
+    await user.save();
+    return res.json({ success: true, message: "Device deregistered" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/admin/employees/:id/attendance/export
+router.get("/employees/:id/attendance/export", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const from = req.query.from ? new Date(req.query.from) : new Date(0);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const Attendance = require("../models/Attendance");
+    const records = await Attendance.find({
+      user: id,
+      timestamp: { $gte: from, $lte: to },
+    }).populate("user", "name email");
+    const createCsvStringifier =
+      require("csv-writer").createObjectCsvStringifier;
+    const csvStringifier = createCsvStringifier({
+      header: [
+        { id: "user", title: "User" },
+        { id: "email", title: "Email" },
+        { id: "type", title: "Type" },
+        { id: "timestamp", title: "Timestamp" },
+        { id: "ip", title: "IP" },
+        { id: "deviceId", title: "DeviceId" },
+      ],
+    });
+    const recordsForCsv = records.map((r) => ({
+      user: r.user?.name || "",
+      email: r.user?.email || "",
+      type: r.type,
+      timestamp: r.timestamp.toISOString(),
+      ip: r.ip || "",
+      deviceId: r.deviceId || "",
+    }));
+    const header = csvStringifier.getHeaderString();
+    const csv = header + csvStringifier.stringifyRecords(recordsForCsv);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="attendance_user_${id}_${Date.now()}.csv"`
+    );
+    return res.send(csv);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/admin/reports?from=&to=
 router.get("/reports", async (req, res) => {
   try {
