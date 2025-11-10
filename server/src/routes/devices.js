@@ -123,7 +123,8 @@ router.post("/requests/:id/approve", auth, async (req, res) => {
             status: "rejected",
             reviewedBy: req.user._id,
             reviewedAt: new Date(),
-            adminNote: "Automatically rejected - superseded by another approved request",
+            adminNote:
+              "Automatically rejected - superseded by another approved request",
           },
         }
       );
@@ -170,14 +171,19 @@ router.post("/requests/:id/cancel", auth, async (req, res) => {
     const id = req.params.id;
     const reqDoc = await DeviceChangeRequest.findById(id);
     if (!reqDoc)
-      return res.status(404).json({ success: false, message: "Request not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Request not found" });
     // Only owner can cancel and only when pending
     if (String(reqDoc.user) !== String(req.user._id))
       return res.status(403).json({ success: false, message: "Forbidden" });
     if (reqDoc.status !== "pending")
       return res
         .status(422)
-        .json({ success: false, message: "Only pending requests can be cancelled" });
+        .json({
+          success: false,
+          message: "Only pending requests can be cancelled",
+        });
 
     reqDoc.status = "cancelled";
     reqDoc.reviewedAt = new Date();
@@ -185,6 +191,32 @@ router.post("/requests/:id/cancel", auth, async (req, res) => {
     await reqDoc.save();
 
     return res.json({ success: true, data: reqDoc });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/devices/requests/:id - delete a device-change request
+router.delete("/requests/:id", auth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const reqDoc = await DeviceChangeRequest.findById(id);
+    if (!reqDoc)
+      return res
+        .status(404)
+        .json({ success: false, message: "Request not found" });
+
+    // Only the request owner or an admin may delete
+    if (
+      String(reqDoc.user) !== String(req.user._id) &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    await reqDoc.remove();
+    return res.json({ success: true, message: "Request deleted" });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: err.message });

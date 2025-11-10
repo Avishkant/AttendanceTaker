@@ -13,7 +13,6 @@ export default function EmployeeDashboard() {
   const [myRequests, setMyRequests] = useState([]);
   const formRef = useRef(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [cancellingId, setCancellingId] = useState(null);
   const fetchHistory = useCallback(async () => {
     try {
       const resp = await api.get("/attendance/history");
@@ -224,31 +223,34 @@ export default function EmployeeDashboard() {
                     >
                       {r.status.toUpperCase()}
                     </span>
-                    {r.status === "pending" && (
+
+                    {/* allow owner or admin to delete the request entirely */}
+                    {(String(r.user) === String(user?.id) ||
+                      user?.role === "admin") && (
                       <button
                         onClick={async () => {
-                          if (!confirm("Cancel this pending request?")) return;
+                          if (!confirm("Delete this request permanently?"))
+                            return;
                           try {
-                            setCancellingId(r._id);
-                            const resp = await api.post(
-                              `/devices/requests/${r._id}/cancel`
+                            const resp = await api.delete(
+                              `/devices/requests/${r._id}`
                             );
                             if (resp.data?.success) {
-                              showToast("Request cancelled", "success");
+                              showToast("Request deleted", "success");
                               await fetchMyRequests();
                             } else {
                               showToast(resp.data?.message || "Error", "error");
                             }
                           } catch (err) {
-                            showToast(err.response?.data?.message || err.message, "error");
-                          } finally {
-                            setCancellingId(null);
+                            showToast(
+                              err.response?.data?.message || err.message,
+                              "error"
+                            );
                           }
                         }}
-                        disabled={cancellingId === r._id}
-                        className="bg-red-500 text-white px-2 py-1 rounded text-sm"
+                        className="bg-gray-500 text-white px-2 py-1 rounded text-sm"
                       >
-                        {cancellingId === r._id ? "Cancelling..." : "Cancel"}
+                        Delete
                       </button>
                     )}
                   </div>
