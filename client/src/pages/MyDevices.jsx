@@ -1,19 +1,64 @@
 import { useEffect, useState } from "react";
 import api from "../api";
-import { useAuth } from "../context/AuthContext";
-import Toast from "../components/Toast";
+import Toast from "../components/Toast"; // Assuming this component exists
+import {
+  FaLaptopCode,
+  FaClock,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaHourglassHalf,
+  FaRedo,
+  FaTimes,
+} from "react-icons/fa";
+
+// Helper component for status icons
+const StatusPill = ({ status }) => {
+  const s = (status || "pending").toString().toLowerCase();
+  let Icon = FaHourglassHalf;
+  let className = "bg-yellow-100 text-yellow-800";
+  let label = s.toUpperCase();
+
+  switch (s) {
+    case "approved":
+      Icon = FaCheckCircle;
+      className = "bg-green-100 text-green-800";
+      break;
+    case "rejected":
+      Icon = FaTimesCircle;
+      className = "bg-red-100 text-red-800";
+      break;
+    case "pending":
+    default:
+      break;
+  }
+
+  return (
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${className}`}
+    >
+      <span className="inline-block transform scale-100">
+        <Icon className="w-3 h-3" />
+      </span>
+      {label}
+    </span>
+  );
+};
 
 export default function MyDevices() {
-  const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const fetchRequests = async () => {
+    setLoading(true);
     try {
       const resp = await api.get("/devices/my-requests");
-      if (resp.data?.success) setRequests(resp.data.data);
+      if (resp.data?.success) setRequests(resp.data.data || []);
+      else setRequests([]);
     } catch (err) {
       setToast({ message: err.message || "Failed to load", type: "error" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -21,52 +66,94 @@ export default function MyDevices() {
     fetchRequests();
   }, []);
 
+  const deleteRequest = async (id) => {
+    if (!confirm("Are you sure you want to delete this device change request?"))
+      return;
+    try {
+      await api.delete(`/devices/requests/${id}`);
+      setToast({ message: "Request deleted successfully.", type: "success" });
+      fetchRequests();
+    } catch (err) {
+      setToast({
+        message: err.response?.data?.message || err.message,
+        type: "error",
+      });
+    }
+  };
+
   return (
-    <div className="p-6">
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-      <h1 className="text-2xl mb-4">My Device Requests — {user?.name}</h1>
-      <div className="bg-white shadow rounded p-4">
-        {requests.length === 0 && <p>No device requests</p>}
-        <ul>
-          {requests.map((r) => (
-            <li key={r._id} className="border-b py-2">
-              <div className="flex justify-between">
-                <div>
-                  <div>
-                    <strong>Device:</strong> {r.newDeviceId}
+    <div className="p-6 min-h-screen bg-gray-50">
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
+      <div className="flex items-center justify-between mb-6 border-b border-gray-200 pb-4">
+        <h1 className="text-3xl font-extrabold text-gray-800 flex items-center gap-3">
+          <FaLaptopCode className="text-gray-600" /> My Device Requests
+        </h1>
+        <button
+          onClick={fetchRequests}
+          disabled={loading}
+          className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-lg text-sm transition shadow-md flex items-center gap-2"
+        >
+          <FaRedo className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+
+      <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-200">
+        {loading ? (
+          <p className="text-center text-gray-500 py-4">Loading requests...</p>
+        ) : requests.length === 0 ? (
+          <p className="text-center text-gray-500 py-4">
+            No device change requests found.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-200">
+            {requests.map((r) => (
+              <li
+                key={r._id}
+                className="py-4 hover:bg-gray-50 transition rounded-lg -mx-2 px-2"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex flex-col">
+                    <div className="font-semibold text-gray-800">
+                      New Device ID:{" "}
+                      <code className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-mono text-sm">
+                        {r.newDeviceId}
+                      </code>
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Requested: {new Date(r.requestedAt).toLocaleString()}
+                      {r.reviewedAt && (
+                        <span className="ml-3">
+                          | Reviewed: {new Date(r.reviewedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {r.adminNote && (
+                      <div className="text-sm text-gray-700 mt-2 p-2 bg-gray-100 rounded-lg border border-gray-200 italic max-w-xl">
+                        Admin note: {r.adminNote}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-600">
-                    Requested: {new Date(r.requestedAt).toLocaleString()}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <StatusPill status={r.status} />
+                    {r.status !== "approved" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteRequest(r._id);
+                        }}
+                        className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition"
+                        title="Delete Request"
+                      >
+                        <FaTimes className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="text-sm">
-                  <span
-                    className={`px-2 py-1 rounded ${
-                      r.status === "approved"
-                        ? "bg-green-200 text-green-800"
-                        : r.status === "rejected"
-                        ? "bg-red-200 text-red-800"
-                        : "bg-yellow-200 text-yellow-800"
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-              </div>
-              {r.adminNote && (
-                <div className="text-sm text-gray-600 mt-1">
-                  Admin note: {r.adminNote}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
