@@ -7,6 +7,7 @@ import MyDevices from "./pages/MyDevices";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminRequests from "./pages/AdminRequests";
 import AdminEmployees from "./pages/AdminEmployees";
+import AdminMarkAttendance from "./pages/AdminMarkAttendance";
 import Layout from "./components/Layout";
 import "./App.css";
 
@@ -67,6 +68,18 @@ function AppRoutes() {
                 <Layout>
                   <ErrorBoundary>
                     <AdminRequests />
+                  </ErrorBoundary>
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/mark-attendance"
+            element={
+              <PrivateRoute roles={["admin"]}>
+                <Layout>
+                  <ErrorBoundary>
+                    <AdminMarkAttendance />
                   </ErrorBoundary>
                 </Layout>
               </PrivateRoute>

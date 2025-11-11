@@ -430,6 +430,42 @@ router.get("/employees/:id/attendance/export", async (req, res) => {
   }
 });
 
+// POST /api/admin/employees/:id/attendance
+// Admin can create an attendance record for a user (used when user forgot to mark)
+router.post("/employees/:id/attendance", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { type, timestamp, note } = req.body;
+    if (!type || !["in", "out"].includes(type))
+      return res.status(422).json({ success: false, message: "Invalid type" });
+
+    const user = await User.findById(id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    let ts = timestamp ? new Date(timestamp) : new Date();
+    if (isNaN(ts.getTime())) ts = new Date();
+
+    const Attendance = require("../models/Attendance");
+    const rec = await Attendance.create({
+      user: user._id,
+      type,
+      timestamp: ts,
+      ip: req.ip || null,
+      deviceId: req.headers["x-device-id"] || null,
+      note: note || "Marked by admin",
+      status: "recorded",
+    });
+
+    return res.json({ success: true, data: rec });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/admin/reports?from=&to=
 router.get("/reports", async (req, res) => {
   try {

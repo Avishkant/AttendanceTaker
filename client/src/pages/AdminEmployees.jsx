@@ -147,6 +147,9 @@ export default function AdminEmployees() {
   const [limit, setLimit] = useState(25); // Default to 25 records per page
   const [lastFetchCount, setLastFetchCount] = useState(0);
   const [attendanceMeta, setAttendanceMeta] = useState(null);
+  const [markDate, setMarkDate] = useState("");
+  const [markTime, setMarkTime] = useState("");
+  const [markType, setMarkType] = useState("in");
 
   // Custom fetch function that handles API calls
   const apiFetch = async (url, opts = {}) => {
@@ -332,6 +335,64 @@ export default function AdminEmployees() {
         fetchEmployees();
         if (selected && selected._id === id)
           viewEmployee({ ...selected, registeredDevice: null });
+      }
+    } catch (err) {
+      setToast({
+        message: err.response?.data?.message || err.message,
+        type: "error",
+      });
+    }
+  };
+
+  // Admin: mark attendance for selected user (used when user forgot to mark)
+  const markAttendanceForEmployee = async () => {
+    if (!selected)
+      return setToast({ message: "Select an employee", type: "error" });
+    // Build ISO timestamp from date + time; if time not provided, use current time
+    try {
+      let ts;
+      if (markDate) {
+        // if markTime provided, combine, otherwise use start of day + current time fallback
+        if (markTime) {
+          const local = new Date(`${markDate}T${markTime}`);
+          ts = local.toISOString();
+        } else {
+          // use date's current time: take markDate and set time to now's time
+          const now = new Date();
+          const d = new Date(markDate);
+          d.setHours(
+            now.getHours(),
+            now.getMinutes(),
+            now.getSeconds(),
+            now.getMilliseconds()
+          );
+          ts = d.toISOString();
+        }
+      } else {
+        ts = new Date().toISOString();
+      }
+
+      const resp = await api.post(
+        `/admin/employees/${selected._id}/attendance`,
+        {
+          type: markType,
+          timestamp: ts,
+          note: "Marked by admin",
+        }
+      );
+      if (resp.data?.success) {
+        setToast({ message: "Attendance marked", type: "success" });
+        // refresh attendance list
+        fetchAttendance(selected._id, {
+          from: fromDate,
+          to: toDate,
+          page: 1,
+          limit,
+        });
+        // reset inputs
+        setMarkDate("");
+        setMarkTime("");
+        setMarkType("in");
       }
     } catch (err) {
       setToast({
@@ -685,6 +746,72 @@ export default function AdminEmployees() {
               </AnimatePresence>
             )}
           </motion.div>
+
+          {/* 3.5 Admin: Mark Attendance for selected employee */}
+          {selected && (
+            <motion.div
+              className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+            >
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                Mark Attendance (Admin)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="text-sm text-gray-600 block mb-1">
+                    Type
+                  </label>
+                  <StyledSelect
+                    value={markType}
+                    onChange={(e) => setMarkType(e.target.value)}
+                  >
+                    <option value="in">IN</option>
+                    <option value="out">OUT</option>
+                  </StyledSelect>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600 block mb-1">
+                    Date
+                  </label>
+                  <StyledInput
+                    type="date"
+                    value={markDate}
+                    onChange={(e) => setMarkDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600 block mb-1">
+                    Time (optional)
+                  </label>
+                  <StyledInput
+                    type="time"
+                    value={markTime}
+                    onChange={(e) => setMarkTime(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <StyledButton
+                    onClick={markAttendanceForEmployee}
+                    variant="success"
+                  >
+                    <FaCheckCircle /> Mark
+                  </StyledButton>
+                  <StyledButton
+                    onClick={() => {
+                      setMarkDate("");
+                      setMarkTime("");
+                      setMarkType("in");
+                    }}
+                    variant="secondary"
+                  >
+                    <FaTimes /> Reset
+                  </StyledButton>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* 4. Recent Attendance */}
           <motion.div

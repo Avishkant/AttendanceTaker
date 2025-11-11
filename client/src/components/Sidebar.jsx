@@ -7,6 +7,7 @@ import {
   FaUserShield,
   FaSignOutAlt,
   FaClock,
+  FaClipboardCheck,
 } from "react-icons/fa";
 
 // --- Reusable Navigation Item Component ---
@@ -62,6 +63,9 @@ export default function Sidebar() {
             </h3>
             <SidebarLink to="/admin" icon={FaUserShield}>
               Admin Panel
+            </SidebarLink>
+            <SidebarLink to="/admin/mark-attendance" icon={FaClipboardCheck}>
+              Mark Attendance
             </SidebarLink>
           </motion.div>
         )}
