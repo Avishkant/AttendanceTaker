@@ -10,6 +10,20 @@ router.post("/mark", auth, verifyDeviceAndIp, async (req, res) => {
   try {
     const user = req.user;
     const type = req.body.type === "out" ? "out" : "in";
+    // Prevent consecutive identical marks (e.g., IN -> IN) to enforce IN before OUT
+    const last = await Attendance.findOne({ user: user._id })
+      .sort({ timestamp: -1 })
+      .limit(1);
+    if (last && last.type === type) {
+      return res.status(422).json({
+        success: false,
+        message:
+          type === "in"
+            ? "You have already marked IN. Please mark OUT before marking IN again."
+            : "You have already marked OUT. Please mark IN before marking OUT again.",
+      });
+    }
+
     const attendance = await Attendance.create({
       user: user._id,
       type,
