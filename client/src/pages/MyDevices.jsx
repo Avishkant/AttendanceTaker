@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../api";
 import Toast from "../components/Toast"; // Assuming this component exists
 import {
@@ -45,16 +45,50 @@ const StatusPill = ({ status }) => {
 };
 
 export default function MyDevices() {
+  // Format helper for display
+  const formatIsoToDDMMYYYYTime = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+  };
   const [requests, setRequests] = useState([]);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [recentUpdated, setRecentUpdated] = useState({});
+  const prevStatuses = useRef({});
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
       const resp = await api.get("/devices/my-requests");
-      if (resp.data?.success) setRequests(resp.data.data || []);
-      else setRequests([]);
+      if (resp.data?.success) {
+        const data = resp.data.data || [];
+        const updated = {};
+        data.forEach((r) => {
+          const prev = prevStatuses.current[r._id];
+          if (prev && prev !== r.status) updated[r._id] = true;
+        });
+        if (Object.keys(updated).length) {
+          setRecentUpdated((s) => ({ ...s, ...updated }));
+          Object.keys(updated).forEach((id) => {
+            setTimeout(() => {
+              setRecentUpdated((s) => {
+                const copy = { ...s };
+                delete copy[id];
+                return copy;
+              });
+            }, 1600);
+          });
+        }
+        data.forEach((r) => (prevStatuses.current[r._id] = r.status));
+        setRequests(data);
+      } else setRequests([]);
     } catch (err) {
       setToast({ message: err.message || "Failed to load", type: "error" });
     } finally {
@@ -110,7 +144,9 @@ export default function MyDevices() {
             {requests.map((r) => (
               <li
                 key={r._id}
-                className="py-4 hover:bg-gray-50 transition rounded-lg -mx-2 px-2"
+                className={`py-4 hover:bg-gray-50 transition rounded-lg -mx-2 px-2 ${
+                  recentUpdated[r._id] ? "status-flash" : ""
+                }`}
               >
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col">
@@ -121,10 +157,10 @@ export default function MyDevices() {
                       </code>
                     </div>
                     <div className="text-sm text-gray-600 mt-1">
-                      Requested: {new Date(r.requestedAt).toLocaleString()}
+                      Requested: {formatIsoToDDMMYYYYTime(r.requestedAt)}
                       {r.reviewedAt && (
                         <span className="ml-3">
-                          | Reviewed: {new Date(r.reviewedAt).toLocaleString()}
+                          | Reviewed: {formatIsoToDDMMYYYYTime(r.reviewedAt)}
                         </span>
                       )}
                     </div>
@@ -136,18 +172,25 @@ export default function MyDevices() {
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <StatusPill status={r.status} />
-                    {r.status !== "approved" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteRequest(r._id);
-                        }}
-                        className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition"
-                        title="Delete Request"
-                      >
-                        <FaTimes className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (r.status === "pending") deleteRequest(r._id);
+                      }}
+                      className={`text-red-600 p-2 rounded-full transition ${
+                        r.status === "pending"
+                          ? "hover:text-red-800 hover:bg-red-50"
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      title={
+                        r.status === "pending"
+                          ? "Delete Request"
+                          : "Action disabled"
+                      }
+                      aria-disabled={r.status !== "pending"}
+                    >
+                      <FaTimes className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </li>

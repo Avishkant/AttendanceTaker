@@ -27,14 +27,25 @@ router.post("/mark", auth, verifyDeviceAndIp, async (req, res) => {
 router.get("/history", auth, async (req, res) => {
   try {
     const user = req.user;
-    const from = req.query.from ? new Date(req.query.from) : new Date(0);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    // parse dates safely; if invalid, fallback to sensible defaults
+    const safeDate = (s, fallback) => {
+      if (!s) return fallback;
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? fallback : d;
+    };
+    const from = safeDate(req.query.from, new Date(0));
+    const to = safeDate(req.query.to, new Date());
+    // pagination support to avoid huge payloads
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
     const records = await Attendance.find({
       user: user._id,
       timestamp: { $gte: from, $lte: to },
     })
       .sort({ timestamp: -1 })
-      .limit(100);
+      .skip(skip)
+      .limit(limit);
     return res.json({ success: true, data: records });
   } catch (err) {
     console.error(err);

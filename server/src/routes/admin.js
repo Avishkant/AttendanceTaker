@@ -2,6 +2,7 @@ const express = require("express");
 const auth = require("../middleware/auth");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const mongoose = require("mongoose");
 const createCsvStringifier = require("csv-writer").createObjectCsvStringifier;
 
 const router = express.Router();
@@ -30,16 +31,162 @@ router.get("/employees", async (req, res) => {
 router.get("/employees/:id/attendance", async (req, res) => {
   try {
     const id = req.params.id;
-    const from = req.query.from ? new Date(req.query.from) : new Date(0);
-    const to = req.query.to ? new Date(req.query.to) : new Date();
+    // parse dates safely
+    const safeDate = (s, fallback) => {
+      if (!s) return fallback;
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? fallback : d;
+    };
+    const from = safeDate(req.query.from, new Date(0));
+    const to = safeDate(req.query.to, new Date());
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+    const groupBy = req.query.groupBy || null; // 'day' | 'week' | 'month' or null
+    console.log(
+      `[admin] attendance for user=${id} from=${from.toISOString()} to=${to.toISOString()} groupBy=${groupBy} page=${page} limit=${limit}`
+    );
     const Attendance = require("../models/Attendance");
+
+    if (groupBy && ["day", "week", "month"].includes(groupBy)) {
+      // build period format expression
+      let periodExpr;
+      if (groupBy === "day") {
+        periodExpr = {
+          $dateToString: { format: "%Y-%m-%d", date: "$timestamp" },
+        };
+      } else if (groupBy === "month") {
+        periodExpr = { $dateToString: { format: "%Y-%m", date: "$timestamp" } };
+      } else if (groupBy === "week") {
+        periodExpr = {
+          $concat: [
+            { $toString: { $isoWeekYear: "$timestamp" } },
+            "-W",
+            { $toString: { $isoWeek: "$timestamp" } },
+          ],
+        };
+      }
+
+      const agg = await Attendance.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(id),
+            timestamp: { $gte: from, $lte: to },
+          },
+        },
+        { $project: { type: 1, timestamp: 1 } },
+        { $addFields: { period: periodExpr } },
+        {
+          $group: {
+            _id: { period: "$period", type: "$type" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.period": -1 } },
+      ]);
+
+      // reshape to [{ period, in, out }]
+      const map = {};
+      agg.forEach((a) => {
+        const period = a._id.period;
+        const type = a._id.type;
+        map[period] = map[period] || { period, in: 0, out: 0 };
+        if (type === "in") map[period].in = a.count;
+        else if (type === "out") map[period].out = a.count;
+      });
+      const result = Object.values(map).sort((x, y) =>
+        x.period > y.period ? -1 : 1
+      );
+      console.log(`[admin] aggregation result count=${result.length}`);
+      console.log(`[admin] aggregation sample=`, result.slice(0, 5));
+      if (result.length === 0) {
+        // include some diagnostics so client can show helpful info
+        const match = { user: new mongoose.Types.ObjectId(id) };
+        const total = await Attendance.countDocuments(match);
+        const minDoc = await Attendance.findOne(match)
+          .sort({ timestamp: 1 })
+          .limit(1);
+        const maxDoc = await Attendance.findOne(match)
+          .sort({ timestamp: -1 })
+          .limit(1);
+        return res.json({
+          success: true,
+          data: result,
+          meta: {
+            total,
+            minTimestamp: minDoc?.timestamp || null,
+            maxTimestamp: maxDoc?.timestamp || null,
+          },
+        });
+      }
+      return res.json({ success: true, data: result });
+    }
+
+    // default: return raw records with pagination (to avoid large payloads)
+    const skip = (page - 1) * limit;
     const records = await Attendance.find({
-      user: id,
+      user: new mongoose.Types.ObjectId(id),
       timestamp: { $gte: from, $lte: to },
     })
       .sort({ timestamp: -1 })
-      .limit(500);
+      .skip(skip)
+      .limit(limit);
+    console.log(`[admin] raw records count=${records.length}`);
+    if (records.length > 0)
+      console.log(
+        `[admin] raw sample timestamps=`,
+        records.slice(0, 3).map((r) => r.timestamp.toISOString())
+      );
+    if (records.length === 0) {
+      const match = { user: new mongoose.Types.ObjectId(id) };
+      const total = await Attendance.countDocuments(match);
+      const minDoc = await Attendance.findOne(match)
+        .sort({ timestamp: 1 })
+        .limit(1);
+      const maxDoc = await Attendance.findOne(match)
+        .sort({ timestamp: -1 })
+        .limit(1);
+      return res.json({
+        success: true,
+        data: records,
+        meta: {
+          total,
+          minTimestamp: minDoc?.timestamp || null,
+          maxTimestamp: maxDoc?.timestamp || null,
+        },
+      });
+    }
     return res.json({ success: true, data: records });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Diagnostic endpoint for admin: returns min/max timestamps and a small sample for a user
+router.get("/employees/:id/attendance/diagnose", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const Attendance = require("../models/Attendance");
+    const match = { user: new mongoose.Types.ObjectId(id) };
+    const total = await Attendance.countDocuments(match);
+    const sampleLatest = await Attendance.find(match)
+      .sort({ timestamp: -1 })
+      .limit(10);
+    const minDoc = await Attendance.findOne(match)
+      .sort({ timestamp: 1 })
+      .limit(1);
+    const maxDoc = await Attendance.findOne(match)
+      .sort({ timestamp: -1 })
+      .limit(1);
+    return res.json({
+      success: true,
+      data: {
+        total,
+        minTimestamp: minDoc ? minDoc.timestamp : null,
+        maxTimestamp: maxDoc ? maxDoc.timestamp : null,
+        sampleLatest,
+      },
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: err.message });
@@ -288,6 +435,66 @@ router.get("/reports", async (req, res) => {
   try {
     const from = req.query.from ? new Date(req.query.from) : new Date(0);
     const to = req.query.to ? new Date(req.query.to) : new Date();
+    const groupBy = req.query.groupBy || null; // day|week|month or null
+
+    if (groupBy && ["day", "week", "month"].includes(groupBy)) {
+      let periodExpr;
+      if (groupBy === "day")
+        periodExpr = {
+          $dateToString: { format: "%Y-%m-%d", date: "$timestamp" },
+        };
+      else if (groupBy === "month")
+        periodExpr = { $dateToString: { format: "%Y-%m", date: "$timestamp" } };
+      else if (groupBy === "week")
+        periodExpr = {
+          $concat: [
+            { $toString: { $isoWeekYear: "$timestamp" } },
+            "-W",
+            { $toString: { $isoWeek: "$timestamp" } },
+          ],
+        };
+
+      const agg = await Attendance.aggregate([
+        { $match: { timestamp: { $gte: from, $lte: to } } },
+        { $project: { user: 1, type: 1, timestamp: 1 } },
+        { $addFields: { period: periodExpr } },
+        {
+          $group: {
+            _id: { user: "$user", period: "$period", type: "$type" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.period": -1 } },
+      ]);
+
+      // reshape to: { user, period, in, out }
+      const map = {};
+      const mongoose = require("mongoose");
+      for (const a of agg) {
+        const userId = a._id.user.toString();
+        const period = a._id.period;
+        const key = `${userId}::${period}`;
+        map[key] = map[key] || { user: userId, period, in: 0, out: 0 };
+        if (a._id.type === "in") map[key].in = a.count;
+        else if (a._id.type === "out") map[key].out = a.count;
+      }
+      const result = Object.values(map);
+      // populate user info
+      const userIds = Array.from(new Set(result.map((r) => r.user)));
+      const users = await User.find({ _id: { $in: userIds } }).select(
+        "name email"
+      );
+      const usersById = Object.fromEntries(
+        users.map((u) => [u._id.toString(), u])
+      );
+      const final = result.map((r) => ({
+        ...r,
+        userInfo: usersById[r.user] || null,
+      }));
+      return res.json({ success: true, data: final });
+    }
+
+    // default old behavior: counts per user/type
     const agg = await Attendance.aggregate([
       { $match: { timestamp: { $gte: from, $lte: to } } },
       { $group: { _id: { user: "$user", type: "$type" }, count: { $sum: 1 } } },
