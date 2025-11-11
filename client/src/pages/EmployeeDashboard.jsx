@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import * as logger from "../lib/logger";
 import api from "../api";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
@@ -13,8 +14,6 @@ import {
   FaHourglassHalf,
   FaTimes,
   FaExchangeAlt,
-  FaArrowLeft,
-  FaArrowRight,
   FaChevronDown,
 } from "react-icons/fa";
 
@@ -124,7 +123,7 @@ export default function EmployeeDashboard() {
         if (data.length < l) setPage(p);
       }
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   }, []);
 
@@ -139,7 +138,7 @@ export default function EmployeeDashboard() {
         setPendingRequest(pending || null);
       }
     } catch (err) {
-      console.debug("failed to fetch my-requests", err);
+      logger.debug("failed to fetch my-requests", err);
     } finally {
       setRefreshing(false);
     }

@@ -4,6 +4,7 @@ import api from "../api";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import * as logger from "../lib/logger";
 import {
   FaUserShield,
   FaSignOutAlt,
@@ -53,11 +54,10 @@ const itemVariants = {
 };
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
-  const [requests, setRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [form, setForm] = useState({
+  const [_form, _setForm] = useState({
     name: "",
     email: "",
     password: "",
@@ -66,19 +66,8 @@ export default function AdminDashboard() {
   const [companyIps, setCompanyIps] = useState("");
   const [editingIps, setEditingIps] = useState({});
   const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(true); // Retaining loading state for best practice
 
   // --- Data Fetching Functions ---
-
-  const fetchRequests = async () => {
-    /* ... (unchanged logic) ... */
-    try {
-      const resp = await api.get("/devices/requests");
-      if (resp.data?.success) setRequests(resp.data.data || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const fetchEmployees = async () => {
     /* ... (unchanged logic) ... */
@@ -86,7 +75,7 @@ export default function AdminDashboard() {
       const resp = await api.get("/admin/employees");
       if (resp.data?.success) setEmployees(resp.data.data || []);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 
@@ -96,41 +85,18 @@ export default function AdminDashboard() {
       const resp = await api.get("/admin/settings/company-ips");
       if (resp.data?.success) setCompanyIps((resp.data.data || []).join(", "));
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchRequests(), fetchEmployees(), fetchCompanyIps()]).finally(
-      () => setLoading(false)
-    );
+    Promise.all([fetchEmployees(), fetchCompanyIps()]).finally(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleChange = (e) => {
+  const _handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((s) => ({ ...s, [name]: value }));
-  };
-
-  // --- Employee Management Functions ---
-
-  const submitEmployee = async (e) => {
-    /* ... (unchanged logic) ... */
-    e.preventDefault();
-    try {
-      const resp = await api.post("/admin/employees", form);
-      if (resp.data?.success) {
-        setToast({ message: "Employee created successfully", type: "success" });
-        setForm({ name: "", email: "", password: "", role: "employee" });
-        fetchEmployees();
-      }
-    } catch (err) {
-      setToast({
-        message: err.response?.data?.message || err.message,
-        type: "error",
-      });
-    }
+    _setForm((s) => ({ ...s, [name]: value }));
   };
 
   // --- IP Settings Management Functions ---
@@ -189,13 +155,12 @@ export default function AdminDashboard() {
 
   // --- Device Request Review Functions ---
 
-  const review = async (id, action) => {
-    /* ... (unchanged logic) ... */
+  const _review = async (id, action) => {
     try {
       const resp = await api.post(`/devices/requests/${id}/${action}`);
       if (resp.data?.success) {
         setToast({ message: `Request ${action}ed`, type: "success" });
-        fetchRequests();
+        // fetchRequests(); // requests UI currently not rendered
       }
     } catch (err) {
       setToast({
