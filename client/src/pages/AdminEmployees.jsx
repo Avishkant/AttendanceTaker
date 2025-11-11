@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import Toast from "../components/Toast";
 import api from "../api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaUserPlus,
   FaUsers,
   FaEye,
   FaEdit,
@@ -21,7 +21,7 @@ import {
   FaArrowRight, // Added for pagination
   FaSyncAlt, // Added for refresh
 } from "react-icons/fa";
-import { useAuth } from "../context/AuthContext"; // Ensure useAuth is imported
+// useAuth not required in this file
 
 // --- Custom Styled Components (White Theme) ---
 
@@ -128,12 +128,7 @@ export default function AdminEmployees() {
   };
 
   const [employees, setEmployees] = useState([]);
-  const [createForm, setCreateForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "employee",
-  });
+
   const [selected, setSelected] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [fromDate, setFromDate] = useState("");
@@ -167,26 +162,12 @@ export default function AdminEmployees() {
   const fetchEmployees = async () => {
     try {
       const resp = await apiFetch("/admin/employees");
-      if (resp?.success) setEmployees(resp.data || []);
+      const list = resp?.success ? resp.data || [] : [];
+      setEmployees(list);
+      return list;
     } catch (err) {
       setToast({ message: err.message, type: "error" });
-    }
-  };
-
-  const createEmployee = async (e) => {
-    e.preventDefault();
-    try {
-      const resp = await api.post("/admin/employees", createForm);
-      if (resp.data?.success) {
-        setToast({ message: "Employee created", type: "success" });
-        setCreateForm({ name: "", email: "", password: "", role: "employee" });
-        fetchEmployees();
-      }
-    } catch (err) {
-      setToast({
-        message: err.response?.data?.message || err.message,
-        type: "error",
-      });
+      return [];
     }
   };
 
@@ -242,8 +223,37 @@ export default function AdminEmployees() {
     }
   };
 
+  const location = useLocation();
+
   useEffect(() => {
-    fetchEmployees();
+    // On mount: fetch employees and optionally auto-select one from ?id=
+    (async () => {
+      try {
+        const resp = await api.get("/admin/employees");
+        const list = resp.data?.success ? resp.data.data || [] : [];
+        setEmployees(list);
+
+        // Prefer navigation state (more reliable), fall back to query param
+        const stateId = location.state?.selectId;
+        if (stateId) {
+          const found = list.find((e) => e._id === stateId);
+          if (found) return viewEmployee(found);
+        }
+
+        const params = new URLSearchParams(location.search);
+        const id = params.get("id");
+        if (id) {
+          const found = list.find((e) => e._id === id);
+          if (found) viewEmployee(found);
+        }
+      } catch (err) {
+        setToast({
+          message: err.response?.data?.message || err.message,
+          type: "error",
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- UI/State Helpers ---
@@ -498,61 +508,7 @@ export default function AdminEmployees() {
       <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto">
         {/* --- Column 1: Create Form & Employee List --- */}
         <div className="w-full lg:w-1/3 space-y-8">
-          {/* 1. Create Employee Form */}
-          <motion.div
-            className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-              <FaUserPlus className="text-gray-600" /> Create Employee
-            </h2>
-            <form onSubmit={createEmployee} className="space-y-3">
-              <StyledInput
-                placeholder="Name"
-                value={createForm.name}
-                onChange={(e) =>
-                  setCreateForm((s) => ({ ...s, name: e.target.value }))
-                }
-                required
-              />
-              <StyledInput
-                placeholder="Email"
-                type="email"
-                value={createForm.email}
-                onChange={(e) =>
-                  setCreateForm((s) => ({ ...s, email: e.target.value }))
-                }
-                required
-              />
-              <StyledInput
-                placeholder="Password"
-                type="password"
-                value={createForm.password}
-                onChange={(e) =>
-                  setCreateForm((s) => ({ ...s, password: e.target.value }))
-                }
-                required
-              />
-
-              <StyledSelect
-                value={createForm.role}
-                onChange={(e) =>
-                  setCreateForm((s) => ({ ...s, role: e.target.value }))
-                }
-              >
-                <option value="employee">Employee</option>
-                <option value="admin">Admin</option>
-              </StyledSelect>
-
-              <div className="pt-2">
-                <StyledButton type="submit" variant="success">
-                  <FaSave /> Create Account
-                </StyledButton>
-              </div>
-            </form>
-          </motion.div>
+          {/* Create form moved to EmployeesList page (modal) */}
 
           {/* 2. Employee List */}
           <motion.div

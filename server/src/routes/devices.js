@@ -178,12 +178,10 @@ router.post("/requests/:id/cancel", auth, async (req, res) => {
     if (String(reqDoc.user) !== String(req.user._id))
       return res.status(403).json({ success: false, message: "Forbidden" });
     if (reqDoc.status !== "pending")
-      return res
-        .status(422)
-        .json({
-          success: false,
-          message: "Only pending requests can be cancelled",
-        });
+      return res.status(422).json({
+        success: false,
+        message: "Only pending requests can be cancelled",
+      });
 
     reqDoc.status = "cancelled";
     reqDoc.reviewedAt = new Date();
@@ -217,6 +215,31 @@ router.delete("/requests/:id", auth, async (req, res) => {
 
     await reqDoc.remove();
     return res.json({ success: true, message: "Request deleted" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/devices/requests (admin) - bulk delete by status (e.g., ?status=rejected)
+router.delete("/requests", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "admin")
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    const status = req.query.status;
+    if (!status)
+      return res
+        .status(422)
+        .json({ success: false, message: "status query parameter required" });
+
+    const allowed = ["pending", "approved", "rejected", "cancelled"];
+    if (!allowed.includes(status))
+      return res
+        .status(422)
+        .json({ success: false, message: "invalid status" });
+
+    const result = await DeviceChangeRequest.deleteMany({ status });
+    return res.json({ success: true, deletedCount: result.deletedCount });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: err.message });

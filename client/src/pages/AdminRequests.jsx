@@ -189,6 +189,36 @@ export default function AdminRequests() {
               <FaArrowLeft className="inline mr-1" /> Back
             </button>
             <button
+              onClick={async () => {
+                if (
+                  !confirm(
+                    "Delete all rejected requests? This cannot be undone."
+                  )
+                )
+                  return;
+                try {
+                  const resp = await api.delete("/devices/requests", {
+                    params: { status: "rejected" },
+                  });
+                  if (resp.data?.success) {
+                    setToast({
+                      message: `Deleted ${resp.data.deletedCount} rejected requests`,
+                      type: "success",
+                    });
+                    fetchRequests();
+                  }
+                } catch (err) {
+                  setToast({
+                    message: err.response?.data?.message || err.message,
+                    type: "error",
+                  });
+                }
+              }}
+              className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg"
+            >
+              <FaTrash className="inline mr-1" /> Delete Rejected
+            </button>
+            <button
               onClick={logout}
               className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-lg"
             >

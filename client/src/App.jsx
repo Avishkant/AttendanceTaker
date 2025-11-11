@@ -3,10 +3,12 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Login from "./pages/Login";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
+import EmployeeHome from "./pages/EmployeeHome";
 import MyDevices from "./pages/MyDevices";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminRequests from "./pages/AdminRequests";
 import AdminEmployees from "./pages/AdminEmployees";
+import EmployeesList from "./pages/EmployeesList";
 import AdminMarkAttendance from "./pages/AdminMarkAttendance";
 import Layout from "./components/Layout";
 import "./App.css";
@@ -27,6 +29,18 @@ function AppRoutes() {
           <Route path="/login" element={<Login />} />
           <Route
             path="/employee"
+            element={
+              <PrivateRoute roles={["employee", "admin"]}>
+                <Layout>
+                  <ErrorBoundary>
+                    <EmployeeHome />
+                  </ErrorBoundary>
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/employee/dashboard"
             element={
               <PrivateRoute roles={["employee", "admin"]}>
                 <Layout>
@@ -87,6 +101,18 @@ function AppRoutes() {
           />
           <Route
             path="/admin/employees"
+            element={
+              <PrivateRoute roles={["admin"]}>
+                <Layout>
+                  <ErrorBoundary>
+                    <EmployeesList />
+                  </ErrorBoundary>
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/employees/manage"
             element={
               <PrivateRoute roles={["admin"]}>
                 <Layout>
