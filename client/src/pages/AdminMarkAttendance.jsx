@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 import Toast from "../components/Toast";
-import { motion } from "framer-motion";
-import { FaCheckCircle, FaTimes } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaCheckCircle, FaTimes, FaClock, FaCalendarAlt, FaUserAlt } from "react-icons/fa";
+
+// --- Custom Styled Components (White Theme) ---
 
 const StyledInput = ({ className = "", ...props }) => (
   <input
@@ -64,6 +66,8 @@ const StyledButton = ({
   );
 };
 
+// --- Main Component ---
+
 export default function AdminMarkAttendance() {
   const [employees, setEmployees] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -97,20 +101,18 @@ export default function AdminMarkAttendance() {
     try {
       let timestamp;
       if (date) {
+        // If date is set, construct timestamp from date and time, defaulting time to NOW
         if (time) {
           timestamp = new Date(`${date}T${time}`).toISOString();
         } else {
+          // If only date is set, merge with current time
           const now = new Date();
-          const d = new Date(date);
-          d.setHours(
-            now.getHours(),
-            now.getMinutes(),
-            now.getSeconds(),
-            now.getMilliseconds()
-          );
-          timestamp = d.toISOString();
+          const [y, m, d] = date.split('-').map(Number);
+          const customDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+          timestamp = customDate.toISOString();
         }
       } else {
+        // If no date/time is set, use current moment
         timestamp = new Date().toISOString();
       }
 
@@ -122,7 +124,7 @@ export default function AdminMarkAttendance() {
 
       if (resp.data?.success) {
         setToast({ message: "Attendance marked", type: "success" });
-        // clear form
+        // clear form only if successful
         setDate("");
         setTime("");
         setType("in");
@@ -148,23 +150,27 @@ export default function AdminMarkAttendance() {
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6 md:p-10">
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
-          <h2 className="text-xl font-semibold mb-4">
-            Admin — Mark Attendance
+      <motion.div
+        className="max-w-3xl mx-auto"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="bg-white rounded-xl shadow-2xl p-8 border border-gray-200">
+          <h2 className="text-2xl font-extrabold mb-6 text-gray-800 flex items-center gap-2">
+            <FaClock className="text-gray-600" /> Admin — Mark Attendance
           </h2>
 
-          <form
-            onSubmit={handleSubmit}
-            className="grid grid-cols-1 sm:grid-cols-4 gap-3"
-          >
-            <div className="sm:col-span-2">
-              <label className="text-sm text-gray-600 block mb-1">
-                Employee
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
+            {/* Row 1: Employee Selection */}
+            <div className="sm:col-span-4">
+              <label className="text-sm text-gray-600 block mb-1 font-medium">
+                Select Employee
               </label>
               <StyledSelect
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
+                required
               >
                 <option value="">-- Select employee --</option>
                 {employees.map((u) => (
@@ -175,40 +181,50 @@ export default function AdminMarkAttendance() {
               </StyledSelect>
             </div>
 
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">Date</label>
-              <StyledInput
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+            {/* Row 2: Date, Time, and Type */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="md:col-span-1">
+                <label className="text-sm text-gray-600 block mb-1 font-medium">
+                  Date
+                </label>
+                <StyledInput
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="text-sm text-gray-600 block mb-1 font-medium">
+                  Time (Optional)
+                </label>
+                <StyledInput
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="text-sm text-gray-600 block mb-1 font-medium">
+                  Type
+                </label>
+                <StyledSelect
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  required
+                >
+                  <option value="in">IN</option>
+                  <option value="out">OUT</option>
+                </StyledSelect>
+              </div>
             </div>
 
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">
-                Time (optional)
-              </label>
-              <StyledInput
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">Type</label>
-              <StyledSelect
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                <option value="in">IN</option>
-                <option value="out">OUT</option>
-              </StyledSelect>
-            </div>
-
-            <div className="sm:col-span-4">
-              <label className="text-sm text-gray-600 block mb-1">
-                Note (optional)
+            {/* Row 3: Note */}
+            <div className="sm:col-span-4 mt-2">
+              <label className="text-sm text-gray-600 block mb-1 font-medium">
+                Note (Optional)
               </label>
               <textarea
                 className="w-full bg-white border border-gray-300 px-3 py-2 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-800 transition duration-200"
@@ -218,7 +234,8 @@ export default function AdminMarkAttendance() {
               />
             </div>
 
-            <div className="sm:col-span-4 flex gap-2 justify-end">
+            {/* Row 4: Submit Buttons */}
+            <div className="sm:col-span-4 flex gap-3 justify-end pt-4 border-t border-gray-100">
               <StyledButton type="submit" variant="success" disabled={loading}>
                 <FaCheckCircle /> {loading ? "Marking..." : "Mark Attendance"}
               </StyledButton>
@@ -233,12 +250,12 @@ export default function AdminMarkAttendance() {
                   setSelectedId("");
                 }}
               >
-                <FaTimes /> Reset
+                <FaTimes /> Reset Form
               </StyledButton>
             </div>
           </form>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

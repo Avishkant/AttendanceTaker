@@ -100,6 +100,38 @@ export default function MyDevices() {
     fetchRequests();
   }, []);
 
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submitRequest = async (e) => {
+    e && e.preventDefault();
+    setSubmitting(true);
+    try {
+      const deviceId = localStorage.getItem("deviceId");
+      const resp = await api.post("/devices/request-change", {
+        deviceId,
+        note,
+      });
+      if (resp.data?.success) {
+        setToast({
+          message: "Device change request submitted",
+          type: "success",
+        });
+        setNote("");
+        fetchRequests();
+      } else {
+        setToast({ message: resp.data?.message || "Failed", type: "error" });
+      }
+    } catch (err) {
+      setToast({
+        message: err.response?.data?.message || err.message,
+        type: "error",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const deleteRequest = async (id) => {
     if (!confirm("Are you sure you want to delete this device change request?"))
       return;
@@ -133,6 +165,30 @@ export default function MyDevices() {
       </div>
 
       <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-200">
+        {/* New Request Form */}
+        <div className="mb-4">
+          <form
+            onSubmit={submitRequest}
+            className="flex flex-col sm:flex-row gap-3 items-start"
+          >
+            <textarea
+              placeholder="Reason / Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full sm:w-auto flex-1 border rounded p-2"
+              rows={2}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded"
+              >
+                {submitting ? "Submitting..." : "Request Change"}
+              </button>
+            </div>
+          </form>
+        </div>
         {loading ? (
           <p className="text-center text-gray-500 py-4">Loading requests...</p>
         ) : requests.length === 0 ? (

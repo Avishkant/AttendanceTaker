@@ -23,7 +23,8 @@ export default function Navbar() {
 
   return (
     <header className="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* make the navbar full-bleed: remove max-width container so background spans full width */}
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-3">
             <Link

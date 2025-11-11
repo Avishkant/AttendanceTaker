@@ -115,7 +115,7 @@ export default function EmployeeHome() {
         </div>
 
         <div className="space-y-6">
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
             <AttendanceButton
               onClick={() => mark("in")}
               type="in"
@@ -126,6 +126,12 @@ export default function EmployeeHome() {
               type="out"
               loading={loading}
             />
+            <button
+              onClick={() => (window.location.href = "/employee/devices")}
+              className="ml-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm"
+            >
+              Request Device Change
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom"; // Added useLocation
 import Toast from "../components/Toast";
 import api from "../api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,14 +14,14 @@ import {
   FaChartLine,
   FaDownload,
   FaDesktop,
-  FaBan,
   FaCheckCircle,
   FaUserAlt,
   FaArrowLeft,
-  FaArrowRight, // Added for pagination
-  FaSyncAlt, // Added for refresh
+  FaArrowRight,
+  FaSyncAlt,
+  FaPlusCircle,
+  FaClock,
 } from "react-icons/fa";
-// useAuth not required in this file
 
 // --- Custom Styled Components (White Theme) ---
 
@@ -96,7 +96,31 @@ const DetailRow = ({ label, value }) => (
 // --- Main Component ---
 
 export default function AdminEmployees() {
-  // Helper: convert stored ISO timestamp (UTC) back to a local YYYY-MM-DD string
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // --- State ---
+  const [employees, setEmployees] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [attendance, setAttendance] = useState([]);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [requests, setRequests] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editValues, setEditValues] = useState({});
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [lastFetchCount, setLastFetchCount] = useState(0);
+  const [attendanceMeta, setAttendanceMeta] = useState(null);
+
+  // Admin Mark Attendance Form State
+  const [markDate, setMarkDate] = useState("");
+  const [markTime, setMarkTime] = useState("");
+  const [markType, setMarkType] = useState("in");
+
+  // --- Helper Functions (Date/Time Formatting) ---
   const isoToLocalDate = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -104,15 +128,6 @@ export default function AdminEmployees() {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const da = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${da}`;
-  };
-  // Format helpers for display: dd/mm/yyyy and dd/mm/yyyy HH:MM:SS
-  const formatIsoToDDMMYYYY = (iso) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
   };
 
   const formatIsoToDDMMYYYYTime = (iso) => {
@@ -127,42 +142,21 @@ export default function AdminEmployees() {
     return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
   };
 
-  const [employees, setEmployees] = useState([]);
-
-  const [selected, setSelected] = useState(null);
-  const [attendance, setAttendance] = useState([]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [requests, setRequests] = useState([]);
-  const [toast, setToast] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [editValues, setEditValues] = useState({});
-  const [resetPasswordValue, setResetPasswordValue] = useState("");
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(25); // Default to 25 records per page
-  const [lastFetchCount, setLastFetchCount] = useState(0);
-  const [attendanceMeta, setAttendanceMeta] = useState(null);
-  const [markDate, setMarkDate] = useState("");
-  const [markTime, setMarkTime] = useState("");
-  const [markType, setMarkType] = useState("in");
-
-  // Custom fetch function that handles API calls
-  const apiFetch = async (url, opts = {}) => {
-    // Placeholder for your actual api implementation using auth/token
-    try {
-      const resp = await api.get(url, opts);
-      return resp.data;
-    } catch (err) {
-      throw err;
-    }
+  const formatIsoToDDMMYYYY = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   // --- API Interactions ---
 
   const fetchEmployees = async () => {
     try {
-      const resp = await apiFetch("/admin/employees");
-      const list = resp?.success ? resp.data || [] : [];
+      const resp = await api.get("/admin/employees");
+      const list = resp.data?.success ? resp.data.data || [] : [];
       setEmployees(list);
       return list;
     } catch (err) {
@@ -190,7 +184,8 @@ export default function AdminEmployees() {
         const data = resp.data.data || [];
         setLastFetchCount(data.length);
         setAttendanceMeta(resp.data.meta || null);
-        // if requesting a later page append raw records; otherwise replace
+
+        // Handle pagination logic for data update
         if (p > 1) setAttendance((s) => [...s, ...data]);
         else setAttendance(data);
       }
@@ -208,55 +203,7 @@ export default function AdminEmployees() {
     }
   };
 
-  const fetchReports = async (opts = {}) => {
-    // This function fetches aggregated reports across ALL users (not just selected)
-    // NOTE: Not fully implemented in the provided component structure, but logic is present.
-    try {
-      const params = {};
-      if (opts.from) params.from = opts.from;
-      if (opts.to) params.to = opts.to;
-      if (opts.groupBy) params.groupBy = opts.groupBy;
-      const resp = await api.get("/admin/reports", { params });
-      if (resp.data?.success) setAttendance(resp.data.data || []);
-    } catch (err) {
-      setToast({ message: err.message, type: "error" });
-    }
-  };
-
-  const location = useLocation();
-
-  useEffect(() => {
-    // On mount: fetch employees and optionally auto-select one from ?id=
-    (async () => {
-      try {
-        const resp = await api.get("/admin/employees");
-        const list = resp.data?.success ? resp.data.data || [] : [];
-        setEmployees(list);
-
-        // Prefer navigation state (more reliable), fall back to query param
-        const stateId = location.state?.selectId;
-        if (stateId) {
-          const found = list.find((e) => e._id === stateId);
-          if (found) return viewEmployee(found);
-        }
-
-        const params = new URLSearchParams(location.search);
-        const id = params.get("id");
-        if (id) {
-          const found = list.find((e) => e._id === id);
-          if (found) viewEmployee(found);
-        }
-      } catch (err) {
-        setToast({
-          message: err.response?.data?.message || err.message,
-          type: "error",
-        });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // --- UI/State Helpers ---
+  // --- Core Functionality ---
 
   const viewEmployee = (u) => {
     setSelected(u);
@@ -264,11 +211,8 @@ export default function AdminEmployees() {
     setRequests([]);
     setPage(1);
 
-    // Check for existing dates before fetching
-    const effFrom = fromDate || null;
-    const effTo = toDate || null;
-
-    fetchAttendance(u._id, { from: effFrom, to: effTo, page: 1, limit });
+    // Initial fetch of attendance (can be controlled by existing date filters)
+    fetchAttendance(u._id, { from: fromDate, to: toDate, page: 1, limit });
     fetchRequests(u._id);
     setEditing(false);
     setEditValues({ name: u.name, role: u.role });
@@ -276,6 +220,7 @@ export default function AdminEmployees() {
   };
 
   const saveEdits = async () => {
+    /* ... (Logic retained) ... */
     try {
       const resp = await api.patch(
         `/admin/employees/${selected._id}`,
@@ -284,7 +229,6 @@ export default function AdminEmployees() {
       if (resp.data?.success) {
         setToast({ message: "Employee updated", type: "success" });
         fetchEmployees();
-        // manually refresh selected object
         const updated =
           employees.find((e) => e._id === selected._id) || selected;
         updated.name = editValues.name;
@@ -301,14 +245,13 @@ export default function AdminEmployees() {
   };
 
   const deleteEmployee = async (id) => {
+    /* ... (Logic retained) ... */
     if (!confirm("CONFIRM: Delete this user? This cannot be undone.")) return;
     try {
-      const resp = await api.delete(`/admin/employees/${id}`);
-      if (resp.data?.success) {
-        setToast({ message: "User deleted", type: "success" });
-        fetchEmployees();
-        setSelected(null);
-      }
+      await api.delete(`/admin/employees/${id}`);
+      setToast({ message: "User deleted", type: "success" });
+      fetchEmployees();
+      setSelected(null);
     } catch (err) {
       setToast({
         message: err.response?.data?.message || err.message,
@@ -318,16 +261,15 @@ export default function AdminEmployees() {
   };
 
   const resetPassword = async (id) => {
+    /* ... (Logic retained) ... */
     if (!resetPasswordValue)
       return setToast({ message: "Enter new password", type: "error" });
     try {
-      const resp = await api.post(`/admin/employees/${id}/reset-password`, {
+      await api.post(`/admin/employees/${id}/reset-password`, {
         password: resetPasswordValue,
       });
-      if (resp.data?.success) {
-        setToast({ message: "Password reset", type: "success" });
-        setResetPasswordValue("");
-      }
+      setToast({ message: "Password reset", type: "success" });
+      setResetPasswordValue("");
     } catch (err) {
       setToast({
         message: err.response?.data?.message || err.message,
@@ -337,73 +279,14 @@ export default function AdminEmployees() {
   };
 
   const deregisterDevice = async (id) => {
+    /* ... (Logic retained) ... */
     if (!confirm("Deregister device for this user?")) return;
     try {
-      const resp = await api.post(`/admin/employees/${id}/deregister-device`);
-      if (resp.data?.success) {
-        setToast({ message: "Device deregistered", type: "success" });
-        fetchEmployees();
-        if (selected && selected._id === id)
-          viewEmployee({ ...selected, registeredDevice: null });
-      }
-    } catch (err) {
-      setToast({
-        message: err.response?.data?.message || err.message,
-        type: "error",
-      });
-    }
-  };
-
-  // Admin: mark attendance for selected user (used when user forgot to mark)
-  const markAttendanceForEmployee = async () => {
-    if (!selected)
-      return setToast({ message: "Select an employee", type: "error" });
-    // Build ISO timestamp from date + time; if time not provided, use current time
-    try {
-      let ts;
-      if (markDate) {
-        // if markTime provided, combine, otherwise use start of day + current time fallback
-        if (markTime) {
-          const local = new Date(`${markDate}T${markTime}`);
-          ts = local.toISOString();
-        } else {
-          // use date's current time: take markDate and set time to now's time
-          const now = new Date();
-          const d = new Date(markDate);
-          d.setHours(
-            now.getHours(),
-            now.getMinutes(),
-            now.getSeconds(),
-            now.getMilliseconds()
-          );
-          ts = d.toISOString();
-        }
-      } else {
-        ts = new Date().toISOString();
-      }
-
-      const resp = await api.post(
-        `/admin/employees/${selected._id}/attendance`,
-        {
-          type: markType,
-          timestamp: ts,
-          note: "Marked by admin",
-        }
-      );
-      if (resp.data?.success) {
-        setToast({ message: "Attendance marked", type: "success" });
-        // refresh attendance list
-        fetchAttendance(selected._id, {
-          from: fromDate,
-          to: toDate,
-          page: 1,
-          limit,
-        });
-        // reset inputs
-        setMarkDate("");
-        setMarkTime("");
-        setMarkType("in");
-      }
+      await api.post(`/admin/employees/${id}/deregister-device`);
+      setToast({ message: "Device deregistered", type: "success" });
+      fetchEmployees();
+      if (selected && selected._id === id)
+        viewEmployee({ ...selected, registeredDevice: null });
     } catch (err) {
       setToast({
         message: err.response?.data?.message || err.message,
@@ -413,6 +296,7 @@ export default function AdminEmployees() {
   };
 
   const exportAttendanceCsv = async (id) => {
+    /* ... (Logic retained) ... */
     try {
       const resp = await api.get(`/admin/employees/${id}/attendance/export`, {
         responseType: "blob",
@@ -432,10 +316,17 @@ export default function AdminEmployees() {
     }
   };
 
+  // --- Attendance Management Logic (New/Refactored) ---
+
   const handleDateRangeApply = () => {
+    /* ... (Logic retained) ... */
     if (!selected) return;
 
-    // Default to the start and end of the day if only one is set
+    // Use current state dates
+    const effFrom = fromDate || null;
+    const effTo = toDate || null;
+
+    // Logic to ensure time range covers full day if necessary (retained for accuracy)
     const endOfDayIso = (iso) => {
       if (!iso) return "";
       const d = new Date(iso);
@@ -443,30 +334,30 @@ export default function AdminEmployees() {
       return d.toISOString();
     };
 
-    let effFrom = fromDate || null;
-    let effTo = toDate || null;
+    let finalFrom = effFrom;
+    let finalTo = effTo;
 
-    if (effFrom && !effTo) {
-      effTo = endOfDayIso(effFrom);
+    if (finalFrom && !finalTo) {
+      finalTo = endOfDayIso(finalFrom);
     } else if (
-      effFrom &&
-      effTo &&
-      isoToLocalDate(effFrom) === isoToLocalDate(effTo)
+      finalFrom &&
+      finalTo &&
+      isoToLocalDate(finalFrom) === isoToLocalDate(finalTo)
     ) {
-      // If dates are same day, ensure 'to' is end of day
-      effTo = endOfDayIso(effFrom);
+      finalTo = endOfDayIso(finalFrom);
     }
 
     setPage(1);
     fetchAttendance(selected._id, {
-      from: effFrom || undefined,
-      to: effTo || undefined,
+      from: finalFrom || undefined,
+      to: finalTo || undefined,
       page: 1,
       limit,
     });
   };
 
   const handlePageChange = (newPage) => {
+    /* ... (Logic retained) ... */
     if (selected && newPage >= 1) {
       const isNext = newPage > page;
       const currentLimit = limit;
@@ -484,6 +375,7 @@ export default function AdminEmployees() {
   };
 
   const handleLimitChange = (e) => {
+    /* ... (Logic retained) ... */
     const newLimit = parseInt(e.target.value, 10);
     setLimit(newLimit);
     setPage(1);
@@ -497,6 +389,94 @@ export default function AdminEmployees() {
     }
   };
 
+  const markAttendanceForEmployee = async () => {
+    if (!selected)
+      return setToast({ message: "Select an employee", type: "error" });
+
+    try {
+      let ts;
+      if (markDate) {
+        // Build ISO timestamp from date + time, defaulting time to NOW if markTime is empty
+        if (markTime) {
+          ts = new Date(`${markDate}T${markTime}`).toISOString();
+        } else {
+          const now = new Date();
+          // Create a date object using the date input's date and the current time
+          const [y, m, d] = markDate.split("-").map(Number);
+          const customDate = new Date(
+            y,
+            m - 1,
+            d,
+            now.getHours(),
+            now.getMinutes(),
+            now.getSeconds(),
+            now.getMilliseconds()
+          );
+          ts = customDate.toISOString();
+        }
+      } else {
+        // If no date/time is set, use current moment
+        ts = new Date().toISOString();
+      }
+
+      const resp = await api.post(
+        `/admin/employees/${selected._id}/attendance`,
+        {
+          type: markType,
+          timestamp: ts,
+          note: "Marked by admin",
+        }
+      );
+
+      if (resp.data?.success) {
+        setToast({ message: "Attendance marked", type: "success" });
+        // Refresh history to show the new entry
+        handleDateRangeApply();
+        // Reset inputs
+        setMarkDate("");
+        setMarkTime("");
+        setMarkType("in");
+      } else {
+        setToast({
+          message: resp.data?.message || "Failed to mark",
+          type: "error",
+        });
+      }
+    } catch (err) {
+      setToast({
+        message: err.response?.data?.message || err.message,
+        type: "error",
+      });
+    }
+  };
+
+  // --- Initial Load ---
+  useEffect(() => {
+    // Initial fetch logic moved from effect to component scope for clarity
+    (async () => {
+      try {
+        const list = await fetchEmployees();
+
+        // Auto-select based on URL state/query param (retained logic)
+        const stateId = location.state?.selectId;
+        const params = new URLSearchParams(location.search);
+        const id = params.get("id");
+
+        const targetId = stateId || id;
+        if (targetId) {
+          const found = list.find((e) => e._id === targetId);
+          if (found) viewEmployee(found);
+        }
+      } catch (err) {
+        setToast({
+          message: err.response?.data?.message || err.message,
+          type: "error",
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // --- Render Component ---
 
   return (
@@ -506,16 +486,13 @@ export default function AdminEmployees() {
       </AnimatePresence>
 
       <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto">
-        {/* --- Column 1: Create Form & Employee List --- */}
+        {/* --- Column 1: Employee List --- */}
         <div className="w-full lg:w-1/3 space-y-8">
-          {/* Create form moved to EmployeesList page (modal) */}
-
-          {/* 2. Employee List */}
           <motion.div
             className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
+            transition={{ duration: 0.5 }}
           >
             <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
               <FaUsers className="text-gray-600" /> Employee List (
@@ -703,7 +680,7 @@ export default function AdminEmployees() {
             )}
           </motion.div>
 
-          {/* 3.5 Admin: Mark Attendance for selected employee */}
+          {/* 3.5 Admin: Mark Attendance for selected employee (Manual Input) */}
           {selected && (
             <motion.div
               className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
@@ -711,8 +688,8 @@ export default function AdminEmployees() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.25 }}
             >
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                Mark Attendance (Admin)
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <FaClock className="text-gray-600" /> Mark Attendance (Admin)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
                 <div>
@@ -769,7 +746,7 @@ export default function AdminEmployees() {
             </motion.div>
           )}
 
-          {/* 4. Recent Attendance */}
+          {/* 4. Recent Attendance & Device Requests (simplified and balanced) */}
           <motion.div
             className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
             initial={{ opacity: 0, y: 20 }}
@@ -777,247 +754,214 @@ export default function AdminEmployees() {
             transition={{ duration: 0.5, delay: 0.3 }}
           >
             <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                  <FaChartLine className="text-gray-600" /> Recent Attendance
+                  <FaChartLine className="text-gray-600" /> Attendance History
                 </h3>
+                {selected && attendance.length > 0 && (
+                  <StyledButton
+                    onClick={() => exportAttendanceCsv(selected._id)}
+                    size="sm"
+                    variant="primary"
+                  >
+                    <FaDownload /> Export CSV
+                  </StyledButton>
+                )}
               </div>
 
-              {/* Date Range Filters and Apply Button */}
-              {selected && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-sm text-gray-600">From:</label>
-                  <StyledInput
-                    type="date"
-                    value={isoToLocalDate(fromDate)}
-                    onChange={(e) => {
-                      setFromDate(
-                        e.target.value
-                          ? new Date(e.target.value).toISOString()
-                          : ""
-                      );
-                      setPage(1);
-                    }}
-                    className="w-36"
-                  />
-                  <label className="text-sm text-gray-600">To:</label>
-                  <StyledInput
-                    type="date"
-                    value={isoToLocalDate(toDate)}
-                    onChange={(e) => {
-                      setToDate(
-                        e.target.value
-                          ? new Date(
-                              new Date(e.target.value).setHours(23, 59, 59, 999)
-                            ).toISOString()
-                          : ""
-                      );
-                      setPage(1);
-                    }}
-                    className="w-36"
-                  />
-                  <StyledButton onClick={handleDateRangeApply} size="sm">
-                    Apply
-                  </StyledButton>
-                  {selected && attendance.length > 0 && (
-                    <StyledButton
-                      onClick={() => exportAttendanceCsv(selected._id)}
-                      variant="primary"
-                      size="sm"
-                    >
-                      <FaDownload /> Export CSV
+              {selected ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="text-sm text-gray-600">From:</label>
+                    <StyledInput
+                      type="date"
+                      value={isoToLocalDate(fromDate)}
+                      onChange={(e) => {
+                        setFromDate(
+                          e.target.value
+                            ? new Date(e.target.value).toISOString()
+                            : ""
+                        );
+                        setPage(1);
+                      }}
+                      className="w-36"
+                    />
+                    <label className="text-sm text-gray-600">To:</label>
+                    <StyledInput
+                      type="date"
+                      value={isoToLocalDate(toDate)}
+                      onChange={(e) => {
+                        setToDate(
+                          e.target.value
+                            ? new Date(
+                                new Date(e.target.value).setHours(
+                                  23,
+                                  59,
+                                  59,
+                                  999
+                                )
+                              ).toISOString()
+                            : ""
+                        );
+                        setPage(1);
+                      }}
+                      className="w-36"
+                    />
+                    <StyledButton onClick={handleDateRangeApply} size="sm">
+                      Apply
                     </StyledButton>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
 
-            {/* Attendance Data Display */}
-            <div className="mt-4">
-              {!selected && (
-                <p className="text-gray-500">
-                  Select an employee to view attendance history.
-                </p>
-              )}
-              {selected && attendance.length === 0 && (
-                <div className="text-gray-500">
-                  <p>No attendance records found.</p>
-                  {attendanceMeta && (
-                    <div className="mt-2 text-xs text-gray-600">
-                      <div>Total records for user: {attendanceMeta.total}</div>
-                      <div>
-                        Earliest:{" "}
-                        {attendanceMeta.minTimestamp
-                          ? formatIsoToDDMMYYYYTime(attendanceMeta.minTimestamp)
-                          : "—"}
+                  <div className="mt-3">
+                    {attendance.length === 0 ? (
+                      <div className="text-gray-500">
+                        <p>No attendance records found.</p>
+                        {attendanceMeta && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            <div>
+                              Total records for user: {attendanceMeta.total}
+                            </div>
+                            <div>
+                              Earliest:{" "}
+                              {attendanceMeta.minTimestamp
+                                ? formatIsoToDDMMYYYYTime(
+                                    attendanceMeta.minTimestamp
+                                  )
+                                : "—"}
+                            </div>
+                            <div>
+                              Latest:{" "}
+                              {attendanceMeta.maxTimestamp
+                                ? formatIsoToDDMMYYYYTime(
+                                    attendanceMeta.maxTimestamp
+                                  )
+                                : "—"}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        Latest:{" "}
-                        {attendanceMeta.maxTimestamp
-                          ? formatIsoToDDMMYYYYTime(attendanceMeta.maxTimestamp)
-                          : "—"}
+                    ) : (
+                      <div className="max-h-60 overflow-y-auto divide-y divide-gray-100">
+                        {attendance.map((a) => (
+                          <div
+                            key={a._id}
+                            className="py-2 flex justify-between items-center hover:bg-gray-50 transition"
+                          >
+                            <div className="text-sm font-medium text-gray-800">
+                              {formatIsoToDDMMYYYYTime(a.timestamp)}
+                            </div>
+                            <div className="text-sm">
+                              <span
+                                className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                  a.type === "in"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }`}
+                              >
+                                {a.type.toUpperCase()}
+                              </span>
+                              <span className="ml-3 text-gray-500">
+                                IP: {a.ip || "—"}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {attendance.length > 0 && (
+                    <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-3">
+                      <div className="flex items-center gap-3">
+                        <StyledButton
+                          onClick={() => handlePageChange(page - 1)}
+                          disabled={page <= 1}
+                          variant="secondary"
+                        >
+                          <FaArrowLeft /> Prev
+                        </StyledButton>
+                        <span className="text-sm text-gray-700">
+                          Page {page}
+                        </span>
+                        <StyledButton
+                          onClick={() => handlePageChange(page + 1)}
+                          disabled={lastFetchCount < limit}
+                          variant="secondary"
+                        >
+                          Next <FaArrowRight />
+                        </StyledButton>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-600">
+                          Page size:
+                        </label>
+                        <StyledSelect
+                          value={limit}
+                          onChange={handleLimitChange}
+                          className="w-20"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                          <option value={200}>200</option>
+                        </StyledSelect>
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Attendance Table / List */}
-              {selected && attendance.length > 0 && (
-                <div className="max-h-60 overflow-y-auto">
-                  {/* Check if data is aggregated (has 'period' property) or raw */}
-                  {attendance[0].period ? (
-                    // Aggregated View
-                    <table className="w-full text-sm border-separate border-spacing-y-1">
-                      <thead>
-                        <tr className="text-left text-gray-500">
-                          <th className="font-semibold">Period</th>
-                          <th className="text-right font-semibold">
-                            Check-ins
-                          </th>
-                          <th className="text-right font-semibold">
-                            Check-outs
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendance.map((r) => (
-                          <tr
-                            key={r.period}
-                            className="bg-gray-50 hover:bg-gray-100 transition"
-                          >
-                            <td className="py-2">{r.period}</td>
-                            <td className="text-right text-green-700 font-medium">
-                              {r.in || 0}
-                            </td>
-                            <td className="text-right text-red-700 font-medium">
-                              {r.out || 0}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    // Raw Records View (Simple List)
-                    <div className="divide-y divide-gray-100">
-                      {attendance.map((a) => (
+                  {/* Device Change Requests */}
+                  <div className="mt-6">
+                    <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                      <FaDesktop className="text-gray-600" /> Device Change
+                      Requests
+                    </h3>
+                    {!selected && (
+                      <p className="text-gray-500">
+                        Select an employee to view device requests.
+                      </p>
+                    )}
+                    {selected && requests.length === 0 && (
+                      <p className="text-gray-500">
+                        No device requests found for this user.
+                      </p>
+                    )}
+                    <div className="mt-3 space-y-3">
+                      {requests.map((r) => (
                         <div
-                          key={a._id}
-                          className="py-2 flex justify-between items-center hover:bg-gray-50 transition"
+                          key={r._id}
+                          className={
+                            r.status === "approved"
+                              ? "p-3 border rounded-lg border-green-300 bg-green-50"
+                              : "p-3 border rounded-lg border-gray-200 bg-gray-50"
+                          }
                         >
-                          <div className="text-sm font-medium text-gray-800">
-                            {formatIsoToDDMMYYYYTime(a.timestamp)}
-                          </div>
-                          <div className="text-sm">
+                          <div className="flex justify-between items-center">
+                            <div className="font-semibold text-gray-800">
+                              New Device ID: {r.newDeviceId}
+                            </div>
                             <span
-                              className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                a.type === "in"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-yellow-100 text-yellow-700"
+                              className={`text-xs font-medium ${
+                                r.status === "approved"
+                                  ? "text-green-700"
+                                  : "text-gray-700"
                               }`}
                             >
-                              {a.type.toUpperCase()}
+                              Status: {r.status}
                             </span>
-                            <span className="ml-3 text-gray-500">
-                              IP: {a.ip || "—"}
-                            </span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Requested: {formatIsoToDDMMYYYY(r.requestedAt)}
                           </div>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-gray-500">
+                  Select an employee to view attendance history.
+                </p>
               )}
-            </div>
-
-            {/* Pagination Controls */}
-            {selected && attendance.length > 0 && (
-              <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-3">
-                <div className="flex items-center gap-3">
-                  <StyledButton
-                    onClick={() => handlePageChange(page - 1)}
-                    disabled={page <= 1}
-                    variant="secondary"
-                  >
-                    <FaArrowLeft /> Prev
-                  </StyledButton>
-                  <span className="text-sm text-gray-700">Page {page}</span>
-                  <StyledButton
-                    onClick={() => handlePageChange(page + 1)}
-                    disabled={lastFetchCount < limit}
-                    variant="secondary"
-                  >
-                    Next <FaArrowRight />
-                  </StyledButton>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Page size:</label>
-                  <StyledSelect
-                    value={limit}
-                    onChange={handleLimitChange}
-                    className="w-20"
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
-                  </StyledSelect>
-                </div>
-              </div>
-            )}
-          </motion.div>
-
-          {/* 5. Device Change Requests */}
-          <motion.div
-            className="bg-white shadow-xl rounded-xl p-6 border border-gray-200"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-          >
-            <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-              <FaDesktop className="text-gray-600" /> Device Change Requests
-            </h3>
-
-            {!selected && (
-              <p className="text-gray-500">
-                Select an employee to view device requests.
-              </p>
-            )}
-            {selected && requests.length === 0 && (
-              <p className="text-gray-500">
-                No device requests found for this user.
-              </p>
-            )}
-
-            <div className="space-y-3">
-              {requests.map((r) => (
-                <div
-                  key={r._id}
-                  className={`p-3 border rounded-lg ${
-                    r.status === "approved"
-                      ? "border-green-300 bg-green-50"
-                      : "border-gray-200 bg-gray-50"
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="font-semibold text-gray-800">
-                      New Device ID: {r.newDeviceId}
-                    </div>
-                    <span
-                      className={`text-xs font-medium ${
-                        r.status === "approved"
-                          ? "text-green-700"
-                          : "text-gray-700"
-                      }`}
-                    >
-                      Status: {r.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    Requested: {formatIsoToDDMMYYYY(r.requestedAt)}
-                  </div>
-                </div>
-              ))}
             </div>
           </motion.div>
         </div>
