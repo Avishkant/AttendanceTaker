@@ -4,7 +4,8 @@ import { useAuth } from "../context/AuthContext";
 export default function Sidebar() {
   const { user, logout } = useAuth();
   return (
-    <aside className="w-64 bg-white border-r shadow-sm flex flex-col">
+    // Hide the desktop sidebar on smaller screens; Navbar provides mobile navigation
+    <aside className="hidden lg:flex w-64 flex-shrink-0 bg-white border-r shadow-sm flex-col">
       <div className="p-6">
         <h2 className="text-xl font-bold text-gray-800">Smart Attendance</h2>
         <div className="text-sm text-gray-500 mt-1">{user?.name}</div>

@@ -240,13 +240,13 @@ export default function AdminDashboard() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex justify-between items-center mb-8 border-b border-gray-200 pb-4"
+          className="flex flex-wrap justify-between items-center mb-8 border-b border-gray-200 pb-4"
         >
           <h1 className="text-3xl font-extrabold text-gray-800">
             <FaUserShield className="inline mr-3 text-gray-600" /> Admin Control
             Panel
           </h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={() => navigate("/admin/requests")}
               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-md"
@@ -333,7 +333,7 @@ export default function AdminDashboard() {
                     variants={itemVariants}
                     whileHover={{ backgroundColor: "rgba(0, 0, 0, 0.03)" }} // Subtle hover effect
                   >
-                    <div className="flex justify-between items-start">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                       <div>
                         <div className="font-semibold text-lg text-gray-900">
                           {u.name}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Login from "./pages/Login";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
 import MyDevices from "./pages/MyDevices";
@@ -28,7 +29,9 @@ function AppRoutes() {
             element={
               <PrivateRoute roles={["employee", "admin"]}>
                 <Layout>
-                  <EmployeeDashboard />
+                  <ErrorBoundary>
+                    <EmployeeDashboard />
+                  </ErrorBoundary>
                 </Layout>
               </PrivateRoute>
             }
@@ -38,7 +41,9 @@ function AppRoutes() {
             element={
               <PrivateRoute roles={["employee", "admin"]}>
                 <Layout>
-                  <MyDevices />
+                  <ErrorBoundary>
+                    <MyDevices />
+                  </ErrorBoundary>
                 </Layout>
               </PrivateRoute>
             }
@@ -48,7 +53,9 @@ function AppRoutes() {
             element={
               <PrivateRoute roles={["admin"]}>
                 <Layout>
-                  <AdminDashboard />
+                  <ErrorBoundary>
+                    <AdminDashboard />
+                  </ErrorBoundary>
                 </Layout>
               </PrivateRoute>
             }
@@ -58,7 +65,9 @@ function AppRoutes() {
             element={
               <PrivateRoute roles={["admin"]}>
                 <Layout>
-                  <AdminRequests />
+                  <ErrorBoundary>
+                    <AdminRequests />
+                  </ErrorBoundary>
                 </Layout>
               </PrivateRoute>
             }
@@ -68,7 +77,9 @@ function AppRoutes() {
             element={
               <PrivateRoute roles={["admin"]}>
                 <Layout>
-                  <AdminEmployees />
+                  <ErrorBoundary>
+                    <AdminEmployees />
+                  </ErrorBoundary>
                 </Layout>
               </PrivateRoute>
             }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../api";
 import { useAuth } from "../context/AuthContext";
-import Toast from "../components/Toast"; // Assuming this component exists
+import Toast from "../components/Toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaClock,
@@ -13,6 +13,9 @@ import {
   FaHourglassHalf,
   FaTimes,
   FaExchangeAlt,
+  FaArrowLeft,
+  FaArrowRight,
+  FaChevronDown,
 } from "react-icons/fa";
 
 // --- Custom Styled Components (White Theme) ---
@@ -74,6 +77,8 @@ export default function EmployeeDashboard() {
   const [myRequests, setMyRequests] = useState([]);
   const formRef = useRef(null);
   const [refreshing, setRefreshing] = useState(false);
+  const limit = 50; // Fixed attendance page size
+
   // Helper: convert stored ISO timestamp (UTC) back to a local YYYY-MM-DD string
   const isoToLocalDate = (iso) => {
     if (!iso) return "";
@@ -82,15 +87,6 @@ export default function EmployeeDashboard() {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const da = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${da}`;
-  };
-  // Format helpers for display: dd/mm/yyyy and dd/mm/yyyy HH:MM:SS
-  const formatIsoToDDMMYYYY = (iso) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
   };
 
   const formatIsoToDDMMYYYYTime = (iso) => {
@@ -105,20 +101,27 @@ export default function EmployeeDashboard() {
     return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
   };
 
+  const showToast = (message, type = "info") => setToast({ message, type });
+
   const fetchHistory = useCallback(async (opts = {}) => {
     try {
       const params = {};
+      const p = opts.page || 1;
+      const l = opts.limit || limit;
       if (opts.from) params.from = opts.from;
       if (opts.to) params.to = opts.to;
-      const p = opts.page || 1;
-      const limit = opts.limit || 50;
       params.page = p;
-      params.limit = limit;
+      params.limit = l;
+
       const resp = await api.get("/attendance/history", { params });
       if (resp.data?.success) {
         const data = resp.data.data || [];
-        if (p && p > 1) setHistory((s) => [...s, ...data]);
+        // Only append if explicitly fetching the next page
+        if (p > 1) setHistory((s) => [...s, ...data]);
         else setHistory(data);
+
+        // This is a simple pagination flag: if we got less than the limit, we hit the end
+        if (data.length < l) setPage(p);
       }
     } catch (err) {
       console.error(err);
@@ -134,28 +137,29 @@ export default function EmployeeDashboard() {
         setMyRequests(list);
         const pending = list.find((r) => r.status === "pending");
         setPendingRequest(pending || null);
-        return list;
       }
     } catch (err) {
       console.debug("failed to fetch my-requests", err);
     } finally {
       setRefreshing(false);
     }
-    return [];
   }, []);
 
+  // --- Initial Load & Polling ---
   useEffect(() => {
-    // initial load: today's records
+    // Initial load: start with today's records
     const today = new Date();
     const start = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate()
     ).toISOString();
+    setFromDate(start); // Set filter state to today
     setPage(1);
     fetchHistory({ from: start, page: 1 });
     fetchMyRequests();
-  }, [fetchHistory, fetchMyRequests]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Poll my-requests while a pending request exists
   useEffect(() => {
@@ -166,15 +170,15 @@ export default function EmployeeDashboard() {
     return () => clearInterval(id);
   }, [pendingRequest, fetchMyRequests]);
 
-  const showToast = (message, type = "info") => setToast({ message, type });
-
   const mark = async (type) => {
     setLoading(true);
     try {
       const resp = await api.post("/attendance/mark", { type });
       if (resp.data?.success) {
         showToast("Attendance marked", "success");
-        fetchHistory();
+        // Reset page to 1 and fetch new data to show the latest entry
+        setPage(1);
+        fetchHistory({ from: fromDate, to: toDate, page: 1 });
       } else {
         showToast(resp.data?.message || "Blocked", "error");
       }
@@ -211,6 +215,17 @@ export default function EmployeeDashboard() {
       const rid = err.response?.data?.requestId;
       if (rid) setPendingRequest({ _id: rid, status: "pending" });
     }
+  };
+
+  const handleHistoryRefresh = () => {
+    setPage(1);
+    fetchHistory({ from: fromDate, to: toDate, page: 1 });
+  };
+
+  const handlePageChange = (newPage) => {
+    if (!newPage || newPage < 1) return;
+    setPage(newPage);
+    fetchHistory({ from: fromDate, to: toDate, page: newPage, limit });
   };
 
   // --- Render Component ---
@@ -265,164 +280,55 @@ export default function EmployeeDashboard() {
             <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <FaCalendarAlt className="text-gray-600" /> Attendance History
             </h2>
-            <div className="flex gap-2 items-center mb-4">
-              <button
-                onClick={() => {
-                  const today = new Date();
-                  const start = new Date(
-                    today.getFullYear(),
-                    today.getMonth(),
-                    today.getDate()
-                  ).toISOString();
-                  const end = new Date(
-                    today.getFullYear(),
-                    today.getMonth(),
-                    today.getDate(),
-                    23,
-                    59,
-                    59
-                  ).toISOString();
-                  setFromDate(start);
-                  setToDate(end);
-                  fetchHistory({ from: start, to: end });
-                }}
-                className="text-sm px-2 py-1 bg-gray-100 rounded"
-              >
-                Today
-              </button>
-              <button
-                onClick={() => {
-                  const today = new Date();
-                  const start = new Date(
-                    today.getFullYear(),
-                    today.getMonth(),
-                    today.getDate() - 6
-                  ).toISOString();
-                  setFromDate(start);
-                  setToDate(new Date().toISOString());
-                  fetchHistory({ from: start, to: new Date().toISOString() });
-                }}
-                className="text-sm px-2 py-1 bg-gray-100 rounded"
-              >
-                This Week
-              </button>
-              <button
-                onClick={() => {
-                  const today = new Date();
-                  const start = new Date(
-                    today.getFullYear(),
-                    today.getMonth(),
-                    1
-                  ).toISOString();
-                  setFromDate(start);
-                  setToDate(new Date().toISOString());
-                  fetchHistory({ from: start, to: new Date().toISOString() });
-                }}
-                className="text-sm px-2 py-1 bg-gray-100 rounded"
-              >
-                This Month
-              </button>
-              {/* date controls moved into the attendance card for better UX */}
-            </div>
             <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-200">
-              <div className="flex items-center gap-3 mb-4">
-                <input
+              {/* Date Filter Bar */}
+              <div className="flex flex-wrap items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+                <label className="text-sm text-gray-600">From:</label>
+                <StyledInput
                   type="date"
                   value={isoToLocalDate(fromDate)}
-                  onChange={(e) => {
-                    const d = e.target.value;
-                    if (!d) return setFromDate("");
-                    const parts = d.split("-");
-                    const dt = new Date(
-                      parseInt(parts[0]),
-                      parseInt(parts[1], 10) - 1,
-                      parseInt(parts[2], 10),
-                      0,
-                      0,
-                      0,
-                      0
-                    );
-                    setFromDate(dt.toISOString());
-                  }}
-                  className="border rounded px-2 py-1 text-sm"
+                  onChange={(e) =>
+                    setFromDate(
+                      e.target.value
+                        ? new Date(e.target.value).toISOString()
+                        : ""
+                    )
+                  }
+                  className="w-36"
                 />
-                <input
+                <label className="text-sm text-gray-600">To:</label>
+                <StyledInput
                   type="date"
                   value={isoToLocalDate(toDate)}
-                  onChange={(e) => {
-                    const d = e.target.value;
-                    if (!d) return setToDate("");
-                    const parts = d.split("-");
-                    const dt = new Date(
-                      parseInt(parts[0]),
-                      parseInt(parts[1], 10) - 1,
-                      parseInt(parts[2], 10),
-                      23,
-                      59,
-                      59,
-                      999
-                    );
-                    setToDate(dt.toISOString());
-                  }}
-                  className="border rounded px-2 py-1 text-sm"
+                  onChange={(e) =>
+                    setToDate(
+                      e.target.value
+                        ? new Date(
+                            new Date(e.target.value).setHours(23, 59, 59, 999)
+                          ).toISOString()
+                        : ""
+                    )
+                  }
+                  className="w-36"
                 />
-                <div className="ml-3 text-sm text-gray-600">
-                  Selected: {fromDate ? formatIsoToDDMMYYYY(fromDate) : "—"}
-                  {toDate ? ` - ${formatIsoToDDMMYYYY(toDate)}` : ""}
-                </div>
-                <button
-                  onClick={() => {
-                    // If only from is set, or both dates are the same calendar day,
-                    // treat as that single day's full range (start..end).
-                    const startOf = fromDate || null;
-                    const endOf = toDate || null;
-                    const endOfDayIso = (iso) => {
-                      if (!iso) return "";
-                      const d = new Date(iso);
-                      d.setHours(23, 59, 59, 999);
-                      return d.toISOString();
-                    };
-                    const sameDay =
-                      startOf &&
-                      endOf &&
-                      isoToLocalDate(startOf) === isoToLocalDate(endOf);
-                    let effFrom = startOf;
-                    let effTo = endOf;
-                    if (startOf && !endOf) {
-                      effTo = endOfDayIso(startOf);
-                      setToDate(effTo);
-                    } else if (sameDay) {
-                      effTo = endOfDayIso(startOf);
-                      setToDate(effTo);
-                    }
-
-                    setPage(1);
-                    fetchHistory({ from: effFrom, to: effTo, page: 1 });
-                  }}
-                  className="text-sm px-2 py-1 bg-indigo-600 text-white rounded"
+                <motion.button
+                  onClick={handleHistoryRefresh}
+                  className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm transition shadow-md flex items-center gap-2"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  Apply
-                </button>
+                  Apply Filters
+                </motion.button>
               </div>
-              {history.length === 0 && (
-                <p className="text-gray-500">No records found yet.</p>
-              )}
-              <div className="max-h-96 overflow-y-auto divide-y divide-gray-200">
-                {history.map((h) => {
-                  const type = (h.type || "").toLowerCase();
-                  const label =
-                    type === "in"
-                      ? "IN"
-                      : type === "out"
-                      ? "OUT"
-                      : (h.type || "").toUpperCase();
-                  const pillClass =
-                    type === "in"
-                      ? "bg-green-100 text-green-700"
-                      : type === "out"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700";
-                  return (
+
+              {/* History List */}
+              {history.length === 0 ? (
+                <p className="text-gray-500 py-4">
+                  No attendance records found for the selected period.
+                </p>
+              ) : (
+                <div className="max-h-96 overflow-y-auto divide-y divide-gray-200">
+                  {history.map((h) => (
                     <div
                       key={h._id}
                       className="py-3 flex justify-between items-center hover:bg-gray-50 transition"
@@ -432,45 +338,35 @@ export default function EmployeeDashboard() {
                       </div>
                       <div className="text-sm">
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold ${pillClass}`}
+                          className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            h.type === "in"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
                         >
-                          {label}
+                          {h.type.toUpperCase()}
                         </span>
                         <span className="ml-3 text-gray-500">
                           IP: {h.ip || "—"}
                         </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-              <div className="mt-4 text-center">
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => {
-                      setPage(1);
-                      fetchHistory({ from: fromDate, to: toDate, page: 1 });
-                    }}
-                    className="text-sm text-gray-600 hover:text-gray-800 transition"
-                  >
-                    Refresh
-                  </button>
-                  <button
-                    onClick={() => {
-                      const next = page + 1;
-                      setPage(next);
-                      fetchHistory({
-                        from: fromDate,
-                        to: toDate,
-                        page: next,
-                        limit: 50,
-                      });
-                    }}
-                    className="text-sm text-gray-600 hover:text-gray-800 transition"
-                  >
-                    Load More
-                  </button>
+                  ))}
                 </div>
+              )}
+
+              {/* Load More/Pagination */}
+              <div className="mt-4 text-center">
+                <motion.button
+                  onClick={() => handlePageChange(page + 1)}
+                  className="text-sm text-gray-600 hover:text-gray-800 transition flex items-center gap-1 mx-auto"
+                  disabled={
+                    history.length % limit !== 0 || history.length === 0
+                  }
+                  whileHover={{ scale: 1.05 }}
+                >
+                  Load More <FaChevronDown className="w-3 h-3" />
+                </motion.button>
               </div>
             </div>
           </motion.section>
@@ -560,7 +456,7 @@ export default function EmployeeDashboard() {
                   return (
                     <motion.li
                       key={r._id}
-                      className="py-3"
+                      className="py-3 hover:bg-gray-50 transition"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                     >
@@ -571,7 +467,7 @@ export default function EmployeeDashboard() {
                             {r.newDeviceId.slice(0, 10)}...
                           </span>
                           <div className="text-xs text-gray-600">
-                            Requested: {formatIsoToDDMMYYYY(r.requestedAt)}
+                            Requested: {formatIsoToDDMMYYYYTime(r.requestedAt)}
                           </div>
                         </div>
                         <span
