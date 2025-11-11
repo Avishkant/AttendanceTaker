@@ -322,7 +322,10 @@ export default function EmployeeDashboard() {
               >
                 This Month
               </button>
-              <div className="ml-auto flex items-center gap-2">
+              {/* date controls moved into the attendance card for better UX */}
+            </div>
+            <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-200">
+              <div className="flex items-center gap-3 mb-4">
                 <input
                   type="date"
                   value={isoToLocalDate(fromDate)}
@@ -401,8 +404,6 @@ export default function EmployeeDashboard() {
                   Apply
                 </button>
               </div>
-            </div>
-            <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-200">
               {history.length === 0 && (
                 <p className="text-gray-500">No records found yet.</p>
               )}
