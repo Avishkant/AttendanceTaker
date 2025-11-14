@@ -1,10 +1,16 @@
 import axios from "axios";
 
-const baseURL = import.meta.env.VITE_API_BASE_URL;
-if (!baseURL)
+let baseURL = import.meta.env.VITE_API_BASE_URL;
+if (baseURL) {
+  if (!baseURL.endsWith("/api")) {
+    baseURL = baseURL.replace(/\/$/, "") + "/api";
+  }
+} else {
   console.warn(
-    "VITE_API_BASE_URL is not set. Set it in client/.env to your backend API base URL."
+    "VITE_API_BASE_URL is not set. Falling back to relative '/api'. Set VITE_API_BASE_URL for cross-origin deployments."
   );
+  baseURL = "/api";
+}
 
 const api = axios.create({
   baseURL,
