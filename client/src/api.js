@@ -1,7 +1,10 @@
 import axios from "axios";
 
-const baseURL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
+const baseURL = import.meta.env.VITE_API_BASE_URL;
+if (!baseURL)
+  console.warn(
+    "VITE_API_BASE_URL is not set. Set it in client/.env to your backend API base URL."
+  );
 
 const api = axios.create({
   baseURL,

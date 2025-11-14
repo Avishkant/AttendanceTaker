@@ -15,7 +15,27 @@ const app = express();
 connectDB();
 
 app.use(helmet());
-app.use(cors());
+
+// Configure CORS to allow the front-end origin from environment.
+// Use FRONTEND_URL from server .env (set to your deployed frontend URL).
+const allowedOrigin = process.env.FRONTEND_URL;
+if (!allowedOrigin) {
+  console.warn(
+    "FRONTEND_URL not set in .env — CORS will allow all origins. Set FRONTEND_URL to restrict access."
+  );
+}
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (!allowedOrigin || origin === allowedOrigin)
+        return callback(null, true);
+      // If FRONTEND_URL is set and origin doesn't match, block the request
+      return callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 app.use(express.json());
 app.use(morgan("dev"));
 
