@@ -75,11 +75,61 @@ router.post("/login", async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          registeredDevice: user.registeredDevice,
         },
       },
     });
   } catch (err) {
     console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/auth/me
+// Get current user profile (requires authentication)
+router.get("/me", async (req, res) => {
+  try {
+    // Extract token from Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "No token provided",
+      });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "replace-with-a-strong-secret"
+    );
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        registeredDevice: user.registeredDevice,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
     return res.status(500).json({ success: false, message: err.message });
   }
 });
