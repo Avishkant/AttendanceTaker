@@ -9,6 +9,8 @@ const authRoutes = require("./routes/auth");
 const attendanceRoutes = require("./routes/attendance");
 const deviceRoutes = require("./routes/devices");
 const adminRoutes = require("./routes/admin");
+const sheetsRoutes = require("./routes/sheets");
+const syncScheduler = require("./services/syncScheduler");
 
 const app = express();
 
@@ -76,6 +78,12 @@ app.use("/api/auth", authRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/devices", deviceRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/sheets", sheetsRoutes);
+
+// Start Google Sheets sync scheduler
+syncScheduler.start().catch(err => {
+  console.error('Failed to start sync scheduler:', err);
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
