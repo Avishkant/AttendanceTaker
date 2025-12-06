@@ -108,9 +108,10 @@ router.post('/sync', async (req, res) => {
     }
 
     // For regular Google Sheets URLs (not Web App), sync all records
-    const isWebApp = config.spreadsheetUrl.includes('script.google.com') || 
-                      config.spreadsheetUrl.includes('/exec');
-    
+    const isWebApp =
+      config.spreadsheetUrl.includes('script.google.com') ||
+      config.spreadsheetUrl.includes('/exec');
+
     let result;
     if (!isWebApp && !config.lastSyncedAt) {
       // First sync with regular sheet - sync all historical records
