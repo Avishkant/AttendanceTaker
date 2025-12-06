@@ -17,7 +17,7 @@ class GoogleSheetsService {
     const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
     return match ? match[1] : null;
   }
-
+ 
   /**
    * Prepare headers for the sheet
    */
@@ -123,17 +123,23 @@ class GoogleSheetsService {
       } else if (config.lastSyncedAt) {
         query.checkInTime = { $gte: config.lastSyncedAt };
       }
+      // If no date filter, get all records (first sync)
 
+      console.log('Syncing with query:', query);
       const attendanceRecords = await Attendance.find(query)
         .sort({ checkInTime: 1 })
         .limit(1000); // Limit to prevent overwhelming the API
+
+      console.log(`Found ${attendanceRecords.length} attendance records`);
 
       if (attendanceRecords.length === 0) {
         return { success: true, recordsCount: 0 };
       }
 
       // Get user details for all records
-      const userIds = [...new Set(attendanceRecords.map(a => a.userId))].filter(Boolean);
+      const userIds = [...new Set(attendanceRecords.map(a => a.userId))].filter(
+        Boolean,
+      );
       const users = await User.find({ _id: { $in: userIds } });
       const userMap = {};
       users.forEach(user => {

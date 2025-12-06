@@ -107,7 +107,27 @@ router.post('/sync', async (req, res) => {
       });
     }
 
-    const result = await googleSheetsService.syncAttendanceRecords(config);
+    // For regular Google Sheets URLs (not Web App), sync all records
+    const isWebApp = config.spreadsheetUrl.includes('script.google.com') || 
+                      config.spreadsheetUrl.includes('/exec');
+    
+    let result;
+    if (!isWebApp && !config.lastSyncedAt) {
+      // First sync with regular sheet - sync all historical records
+      result = await googleSheetsService.syncAllRecords(config);
+    } else {
+      result = await googleSheetsService.syncAttendanceRecords(config);
+    }
+
+    // For non-WebApp URLs, provide manual instructions
+    if (!isWebApp) {
+      return res.json({
+        success: true,
+        message: `Found ${result.recordsCount} records. Since you're using a regular Google Sheets URL, please set up a Google Apps Script Web App to enable automatic syncing. See documentation for setup instructions.`,
+        recordsCount: result.recordsCount,
+        requiresWebApp: true,
+      });
+    }
 
     res.json({
       success: true,
