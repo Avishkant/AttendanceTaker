@@ -139,7 +139,8 @@ router.post('/sync', async (req, res) => {
     console.error('Error syncing to sheets:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to sync attendance records',
+      message: error.message || 'Failed to sync attendance data',
+      error: error.toString(),
     });
   }
 });
