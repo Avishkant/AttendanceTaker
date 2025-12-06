@@ -18,7 +18,7 @@ router.use(auth, (req, res, next) => {
 router.get('/config', async (req, res) => {
   try {
     const config = await SheetsConfig.findOne({ isActive: true });
-    
+
     res.json({
       success: true,
       data: config,
@@ -48,21 +48,20 @@ router.post('/config', async (req, res) => {
     }
 
     // Extract spreadsheet ID from URL
-    const spreadsheetId = googleSheetsService.extractSpreadsheetId(spreadsheetUrl);
-    if (!spreadsheetId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid Google Sheets URL',
-      });
-    }
+    const spreadsheetId =
+      googleSheetsService.extractSpreadsheetId(spreadsheetUrl);
 
-    // Try to access the sheet to validate
-    try {
-      await googleSheetsService.initializeSheet(spreadsheetId, sheetName);
-    } catch (error) {
+    // If spreadsheet ID extraction fails, still allow saving for Web App URLs
+    // Web App URLs look like: https://script.google.com/macros/s/.../exec
+    const isWebAppUrl =
+      spreadsheetUrl.includes('script.google.com') ||
+      spreadsheetUrl.includes('/exec');
+
+    if (!spreadsheetId && !isWebAppUrl) {
       return res.status(400).json({
         success: false,
-        message: 'Unable to access the Google Sheet. Please make sure:\n1. The sheet is shared with "Anyone with the link can edit"\n2. The URL is correct\n3. The sheet name exists',
+        message:
+          'Invalid Google Sheets URL. Please provide either:\n1. A Google Sheets URL (https://docs.google.com/spreadsheets/d/...)\n2. A Google Apps Script Web App URL (https://script.google.com/...)',
       });
     }
 
@@ -72,7 +71,7 @@ router.post('/config', async (req, res) => {
     // Create or update config
     const config = await SheetsConfig.create({
       spreadsheetUrl,
-      spreadsheetId,
+      spreadsheetId: spreadsheetId || 'webapp',
       sheetName,
       autoSync: autoSync !== undefined ? autoSync : true,
       syncInterval: syncInterval || 30,

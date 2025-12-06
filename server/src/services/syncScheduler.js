@@ -12,7 +12,7 @@ class SyncScheduler {
    */
   async start() {
     console.log('Starting Google Sheets sync scheduler...');
-    
+
     // Check every minute if we need to sync
     this.mainJob = cron.schedule('* * * * *', async () => {
       await this.checkAndSync();
@@ -27,15 +27,20 @@ class SyncScheduler {
    */
   async checkAndSync() {
     try {
-      const config = await SheetsConfig.findOne({ isActive: true, autoSync: true });
-      
+      const config = await SheetsConfig.findOne({
+        isActive: true,
+        autoSync: true,
+      });
+
       if (!config) {
         return;
       }
 
       const now = new Date();
-      const lastSync = config.lastSyncedAt ? new Date(config.lastSyncedAt) : null;
-      
+      const lastSync = config.lastSyncedAt
+        ? new Date(config.lastSyncedAt)
+        : null;
+
       if (!lastSync) {
         // First sync
         console.log('Performing initial Google Sheets sync...');
@@ -45,9 +50,11 @@ class SyncScheduler {
 
       // Check if enough time has passed
       const minutesSinceLastSync = (now - lastSync) / (1000 * 60);
-      
+
       if (minutesSinceLastSync >= config.syncInterval) {
-        console.log(`Syncing to Google Sheets (${config.syncInterval} minutes elapsed)...`);
+        console.log(
+          `Syncing to Google Sheets (${config.syncInterval} minutes elapsed)...`,
+        );
         await this.performSync(config);
       }
     } catch (error) {
@@ -61,7 +68,9 @@ class SyncScheduler {
   async performSync(config) {
     try {
       const result = await googleSheetsService.syncAttendanceRecords(config);
-      console.log(`✓ Synced ${result.recordsCount} attendance records to Google Sheets`);
+      console.log(
+        `✓ Synced ${result.recordsCount} attendance records to Google Sheets`,
+      );
       return result;
     } catch (error) {
       console.error('✗ Failed to sync to Google Sheets:', error.message);

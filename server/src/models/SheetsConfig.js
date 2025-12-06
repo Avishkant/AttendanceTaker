@@ -38,7 +38,7 @@ const sheetsConfigSchema = new mongoose.Schema({
   },
 });
 
-sheetsConfigSchema.pre('save', function(next) {
+sheetsConfigSchema.pre('save', function (next) {
   this.updatedAt = Date.now();
   next();
 });

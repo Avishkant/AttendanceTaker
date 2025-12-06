@@ -6,7 +6,8 @@ class GoogleSheetsService {
   constructor() {
     // We'll use a simpler approach - generate data that can be pasted into Google Sheets
     // Or use Google Sheets API if credentials are provided
-    this.useApi = !!process.env.GOOGLE_API_KEY || !!process.env.GOOGLE_SERVICE_ACCOUNT;
+    this.useApi =
+      !!process.env.GOOGLE_API_KEY || !!process.env.GOOGLE_SERVICE_ACCOUNT;
   }
 
   /**
@@ -39,10 +40,14 @@ class GoogleSheetsService {
    * Format attendance record for sheet
    */
   formatAttendanceRecord(attendance, user) {
-    const checkInDate = attendance.checkInTime ? new Date(attendance.checkInTime) : null;
-    const checkOutDate = attendance.checkOutTime ? new Date(attendance.checkOutTime) : null;
-    
-    const formatTime = (date) => {
+    const checkInDate = attendance.checkInTime
+      ? new Date(attendance.checkInTime)
+      : null;
+    const checkOutDate = attendance.checkOutTime
+      ? new Date(attendance.checkOutTime)
+      : null;
+
+    const formatTime = date => {
       if (!date) return '';
       return date.toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -52,7 +57,7 @@ class GoogleSheetsService {
       });
     };
 
-    const formatDate = (date) => {
+    const formatDate = date => {
       if (!date) return '';
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
@@ -77,7 +82,7 @@ class GoogleSheetsService {
     return [
       formatDate(checkInDate),
       user?.name || 'Unknown',
-      user?._id?.toString().slice(-6) || '',
+      user?._id ? user._id.toString().slice(-6) : '',
       formatTime(checkInDate),
       formatTime(checkOutDate),
       calculateDuration(),
@@ -128,22 +133,27 @@ class GoogleSheetsService {
       }
 
       // Get user details for all records
-      const userIds = [...new Set(attendanceRecords.map(a => a.userId))];
+      const userIds = [...new Set(attendanceRecords.map(a => a.userId))].filter(Boolean);
       const users = await User.find({ _id: { $in: userIds } });
       const userMap = {};
       users.forEach(user => {
-        userMap[user._id.toString()] = user;
+        if (user && user._id) {
+          userMap[user._id.toString()] = user;
+        }
       });
 
       // Format records for sheet
       const rows = attendanceRecords.map(attendance => {
-        const user = userMap[attendance.userId.toString()];
+        const userId = attendance.userId ? attendance.userId.toString() : null;
+        const user = userId ? userMap[userId] : null;
         return this.formatAttendanceRecord(attendance, user);
       });
 
       // If a web app URL is provided in the spreadsheet URL, use that
-      if (config.spreadsheetUrl.includes('script.google.com') || 
-          config.spreadsheetUrl.includes('/exec')) {
+      if (
+        config.spreadsheetUrl.includes('script.google.com') ||
+        config.spreadsheetUrl.includes('/exec')
+      ) {
         await this.syncViaWebApp(config.spreadsheetUrl, rows);
       } else {
         // Otherwise, we'll store the data and provide instructions to manually copy
