@@ -20,18 +20,15 @@ router.get('/employees', async (req, res) => {
   try {
     const { q } = req.query;
     let query = {};
-    
+
     // If search query exists, search by name or email
     if (q && q.trim()) {
       const searchRegex = new RegExp(q.trim(), 'i'); // case-insensitive search
       query = {
-        $or: [
-          { name: searchRegex },
-          { email: searchRegex }
-        ]
+        $or: [{ name: searchRegex }, { email: searchRegex }],
       };
     }
-    
+
     const list = await User.find(query)
       .select('-passwordHash')
       .sort({ createdAt: -1 });
