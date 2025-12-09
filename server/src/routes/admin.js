@@ -303,9 +303,12 @@ router.post('/employees', async (req, res) => {
       passwordHash: hash,
       role: role || 'employee',
     });
+    // Return complete user data (excluding passwordHash)
+    const userData = user.toObject();
+    delete userData.passwordHash;
     return res.json({
       success: true,
-      data: { id: user._id, email: user.email },
+      data: userData,
     });
   } catch (err) {
     console.error(err);
